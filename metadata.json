@@ -1,0 +1,6 @@
+{
+  "name": "FlashScore Next - Scores de Football en Direct & Alertes",
+  "description": "Application moderne et futuriste de scores de football en direct avec notifications personnalisées en temps réel, statistiques avancées, tracker de match 2D et thèmes clair et sombre.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

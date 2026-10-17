@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+/* Le basculement clair/sombre de l'app ajoute la classe .dark sur <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Chakra Petch', 'Plus Jakarta Sans', system-ui, sans-serif;
+
+  /* Gris bleutés « encre » */
+  --color-slate-50: #f4f7ff;
+  --color-slate-100: #e9eefb;
+  --color-slate-200: #d6def2;
+  --color-slate-300: #b4c0e0;
+  --color-slate-400: #8794bc;
+  --color-slate-500: #5f6c96;
+  --color-slate-600: #434f78;
+  --color-slate-700: #2a3459;
+  --color-slate-800: #1a2142;
+  --color-slate-900: #0f1530;
+  --color-slate-950: #070b1b;
+
+  /* Rouge = signal « direct / alerte » */
+  --color-red-50: #fff1f3;
+  --color-red-100: #ffe0e5;
+  --color-red-300: #ff9fb0;
+  --color-red-400: #ff6b87;
+  --color-red-500: #ff2d55;
+  --color-red-600: #e5173f;
+  --color-red-700: #bf0f34;
+  --color-red-900: #6b0a1e;
+  --color-red-950: #3a0510;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, .tabular-nums {
+    font-family: var(--font-display);
+    letter-spacing: 0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid #22d3ee;
+    outline-offset: 2px;
+  }
+}
+
+/* ---------- Fond ambiant (grille + lueurs) ---------- */
+.fs-bg {
+  position: relative;
+  isolation: isolate;
+  background-color: #eef2fc;
+}
+.dark .fs-bg { background-color: #070b1b; }
+
+.fs-bg::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(60rem 28rem at 12% -8%, rgba(99, 102, 241, 0.16), transparent 60%),
+    radial-gradient(48rem 24rem at 100% 0%, rgba(34, 211, 238, 0.13), transparent 60%),
+    linear-gradient(rgba(95, 108, 150, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(95, 108, 150, 0.07) 1px, transparent 1px);
+  background-size: auto, auto, 44px 44px, 44px 44px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
+}
+.dark .fs-bg::before {
+  background-image:
+    radial-gradient(60rem 28rem at 12% -8%, rgba(124, 92, 255, 0.28), transparent 60%),
+    radial-gradient(48rem 24rem at 100% 0%, rgba(34, 211, 238, 0.20), transparent 60%),
+    linear-gradient(rgba(140, 160, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(140, 160, 255, 0.07) 1px, transparent 1px);
+}
+
+/* ---------- Surfaces en verre ---------- */
+.fs-bar {
+  background: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  border-color: rgba(95, 108, 150, 0.18) !important;
+}
+.dark .fs-bar {
+  background: rgba(8, 12, 30, 0.70);
+  border-color: rgba(140, 160, 255, 0.12) !important;
+}
+.fs-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.65), rgba(139, 92, 246, 0.65), transparent);
+}
+.fs-bar-top::after { bottom: -1px; }
+.fs-bar-bottom::after { top: -1px; }
+
+.fs-surface {
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.dark .fs-surface { background: rgba(10, 15, 36, 0.55); }
+
+.fs-card {
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-color: rgba(95, 108, 150, 0.2) !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 8px 28px -14px rgba(40, 55, 120, 0.35);
+}
+.dark .fs-card {
+  background: rgba(13, 19, 44, 0.62);
+  border-color: rgba(140, 160, 255, 0.14) !important;
+  box-shadow: 0 1px 0 rgba(180, 200, 255, 0.07) inset, 0 12px 36px -16px rgba(0, 0, 0, 0.7);
+}
+
+/* ---------- Match en direct : trait néon à gauche ---------- */
+.fs-live-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(to bottom, #ff2d55, #ff6b87);
+  box-shadow: 0 0 14px 1px rgba(255, 45, 85, 0.65);
+}
+.fs-live-row { background-image: linear-gradient(90deg, rgba(255, 45, 85, 0.07), transparent 38%); }
+
+/* ---------- Logo ---------- */
+.fs-logo {
+  background: linear-gradient(135deg, #7c5cff, #22d3ee);
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.45);
+}
+.fs-text-gradient {
+  background: linear-gradient(90deg, #8b7bff, #22d3ee);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Barres de défilement fines */
+* { scrollbar-width: thin; scrollbar-color: rgba(120, 135, 190, 0.45) transparent; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-slide-down { animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+
+/* Hide scrollbar for clean horizontal scroller */
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
