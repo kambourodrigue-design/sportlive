@@ -11,6 +11,9 @@ interface Env {
   LIVE_CACHE_SECONDS?: string;
   ANTHROPIC_API_KEY?: string;
   AI_MODEL?: string;
+  DEEPSEEK_API_KEY?: string;
+  DEEPSEEK_MODEL?: string;
+  AI_PRIMARY?: string; // 'deepseek' (défaut) ou 'claude' : modèle essayé en premier
   PICKS_CACHE_SECONDS?: string;
   CACHE?: KV;
 }
@@ -131,6 +134,7 @@ interface HistoryEntry {
   home: string;
   away: string;
   bet: Bet;
+  model?: string;
   market: string;
   confidence: number;
   result: 'pending' | 'won' | 'lost' | 'void';
@@ -179,6 +183,7 @@ async function recordHistory(env: Env, picks: any[]): Promise<void> {
       home: p.home,
       away: p.away,
       bet: p.bet,
+      model: p.model,
       market: p.market,
       confidence: p.confidence,
       result: 'pending',
@@ -318,8 +323,14 @@ async function loadCandidates(env: Env): Promise<Candidate[]> {
   return settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
 }
 
-async function askClaude(env: Env, candidates: Candidate[]): Promise<AiPick[]> {
-  const system =
+type AiModelName = 'claude' | 'deepseek';
+
+function hasAi(env: Env): boolean {
+  return Boolean(env.ANTHROPIC_API_KEY || env.DEEPSEEK_API_KEY);
+}
+
+function aiSystemPrompt(): string {
+  return (
     "Tu es un analyste football prudent et honnête. On te donne des matchs à venir avec des statistiques. " +
     `Choisis au maximum ${MAX_PICKS} matchs où les données convergent le plus clairement (jamais plus que nécessaire : si peu de matchs sont fiables, n'en retiens que 1 ou 2). ` +
     "Pour chacun, propose UN pari simple portant sur le résultat à 90 minutes. " +
@@ -327,8 +338,11 @@ async function askClaude(env: Env, candidates: Candidate[]): Promise<AiPick[]> {
     "Le champ market est le libellé lisible en français correspondant (ex. « Victoire de Paris SG », « Plus de 1,5 buts »). " +
     "La confiance est un entier entre 0 et 100, calibré sur les données fournies, jamais au-dessus de 85. " +
     "N'invente aucune statistique absente des données. Explique en français en 2 phrases courtes maximum. " +
-    'Réponds UNIQUEMENT avec du JSON : {"picks":[{"fixtureId":number,"bet":string,"market":string,"confidence":number,"reasoning":string}]}';
+    'Réponds UNIQUEMENT avec du JSON : {"picks":[{"fixtureId":number,"bet":string,"market":string,"confidence":number,"reasoning":string}]}'
+  );
+}
 
+async function askClaude(env: Env, candidates: Candidate[]): Promise<string> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -339,23 +353,74 @@ async function askClaude(env: Env, candidates: Candidate[]): Promise<AiPick[]> {
     body: JSON.stringify({
       model: env.AI_MODEL || 'claude-haiku-5-5',
       max_tokens: 1200,
-      system,
+      system: aiSystemPrompt(),
       messages: [{ role: 'user', content: JSON.stringify(candidates) }],
     }),
   });
   if (!res.ok) throw new Error(`Anthropic API error: ${res.status}`);
   const body = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
-  const text = (body.content || []).filter((b) => b.type === 'text').map((b) => b.text || '').join('');
+  return (body.content || []).filter((b) => b.type === 'text').map((b) => b.text || '').join('');
+}
+
+async function askDeepSeek(env: Env, candidates: Candidate[], modelId: string): Promise<string> {
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: modelId,
+      max_tokens: 1200,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: aiSystemPrompt() },
+        { role: 'user', content: JSON.stringify(candidates) },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`DeepSeek API error: ${res.status}`);
+  const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  return body.choices?.[0]?.message?.content || '';
+}
+
+function parseAiPicks(text: string): AiPick[] {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('Réponse IA illisible');
   const parsed = JSON.parse(match[0]) as { picks?: AiPick[] };
   return Array.isArray(parsed.picks) ? parsed.picks : [];
 }
 
+// Essaie le modèle principal, puis bascule sur l'autre s'il est absent, en panne ou répond n'importe quoi.
+// Un modèle sans clé configurée est simplement ignoré.
+async function askAi(env: Env, candidates: Candidate[]): Promise<{ picks: AiPick[]; model: AiModelName }> {
+  const order: AiModelName[] = env.AI_PRIMARY === 'claude' ? ['claude', 'deepseek'] : ['deepseek', 'claude'];
+  const available = order.filter((m) => (m === 'claude' ? env.ANTHROPIC_API_KEY : env.DEEPSEEK_API_KEY));
+  let lastError: unknown = new Error('Aucun modèle IA configuré');
+  for (const model of available) {
+    try {
+      if (model === 'claude') {
+        return { picks: parseAiPicks(await askClaude(env, candidates)), model };
+      }
+      // DeepSeek : V4 Pro d'abord, V4 Flash en secours, avant de passer à Claude
+      const ids = [env.DEEPSEEK_MODEL || 'deepseek-v4-pro', 'deepseek-v4-flash'].filter((id, i, arr) => arr.indexOf(id) === i);
+      let dsError: unknown = new Error('DeepSeek indisponible');
+      for (const id of ids) {
+        try {
+          return { picks: parseAiPicks(await askDeepSeek(env, candidates, id)), model };
+        } catch (err) {
+          dsError = err;
+        }
+      }
+      throw dsError;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
 async function buildPicks(env: Env): Promise<unknown[]> {
   const candidates = await loadCandidates(env);
   if (candidates.length === 0) return [];
-  const aiPicks = await askClaude(env, candidates);
+  const { picks: aiPicks, model } = await askAi(env, candidates);
   const byId = new Map(candidates.map((c) => [c.fixtureId, c]));
   return aiPicks
     .filter((p) => byId.has(p.fixtureId) && (BETS as readonly string[]).includes(p.bet))
@@ -369,6 +434,7 @@ async function buildPicks(env: Env): Promise<unknown[]> {
         away: c.away,
         percent: c.percent,
         bet: p.bet,
+        model,
         market: String(p.market || '').slice(0, 80),
         confidence: Math.max(0, Math.min(85, Math.round(Number(p.confidence) || 0))),
         reasoning: String(p.reasoning || '').slice(0, 400),
@@ -388,7 +454,7 @@ export default {
       if (url.pathname === '/api/status') {
         return json({
           configured,
-          aiConfigured: Boolean(env.ANTHROPIC_API_KEY),
+          aiConfigured: hasAi(env),
           provider: env.API_FOOTBALL_KEY ? 'api-sports' : env.RAPIDAPI_KEY ? 'rapidapi' : 'demo-simulation',
           baseUrl: configured ? (env.RAPIDAPI_KEY ? RAPID_URL : BASE_URL) : null,
           message: configured
@@ -418,6 +484,14 @@ export default {
             pending: count('pending'),
             void: count('void'),
             rate: won + lost > 0 ? Math.round((won / (won + lost)) * 100) : null,
+            byModel: (['claude', 'deepseek'] as const)
+              .map((m) => {
+                const mine = h.entries.filter((e) => e.model === m);
+                const w = mine.filter((e) => e.result === 'won').length;
+                const l = mine.filter((e) => e.result === 'lost').length;
+                return { model: m, won: w, lost: l, rate: w + l > 0 ? Math.round((w / (w + l)) * 100) : null };
+              })
+              .filter((x) => x.won + x.lost > 0),
           },
           entries: h.entries.slice(0, 30),
         });
@@ -442,8 +516,8 @@ export default {
       }
 
       if (url.pathname === '/api/picks') {
-        if (!configured) return json({ success: true, fromRealApi: false, aiConfigured: Boolean(env.ANTHROPIC_API_KEY), picks: [] });
-        if (!env.ANTHROPIC_API_KEY) return json({ success: true, fromRealApi: true, aiConfigured: false, picks: [] });
+        if (!configured) return json({ success: true, fromRealApi: false, aiConfigured: hasAi(env), picks: [] });
+        if (!hasAi(env)) return json({ success: true, fromRealApi: true, aiConfigured: false, picks: [] });
         const picksTtl = Math.max(60, parseInt(env.PICKS_CACHE_SECONDS || '21600', 10)); // 6 h par défaut
         const key = `picks_${isoDay(new Date())}`;
         const hit = await cacheGet(env, key, picksTtl);
