@@ -84,13 +84,21 @@ function isConfigured(env: Env): boolean {
   return Boolean(env.API_FOOTBALL_KEY || env.RAPIDAPI_KEY);
 }
 
-async function callApiRaw(env: Env, path: string): Promise<{ response: any[]; errors: string | null }> {
-  const rapid = Boolean(env.RAPIDAPI_KEY);
+// Dernier quota connu d'API-Football (lu dans les en-têtes de réponse)
+let lastQuota: { remaining: number; limit: number } | null = null;
+
+async function callApiRaw(env: Env, path: string, baseOverride?: string): Promise<{ response: any[]; errors: string | null }> {
+  const rapid = Boolean(env.RAPIDAPI_KEY) && !baseOverride;
   const headers: Record<string, string> = rapid
     ? { 'x-rapidapi-key': env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'api-football-v1.p.rapidapi.com' }
     : { 'x-apisports-key': env.API_FOOTBALL_KEY! };
-  const res = await fetch(`${rapid ? RAPID_URL : BASE_URL}${path}`, { headers });
+  const res = await fetch(`${baseOverride ?? (rapid ? RAPID_URL : BASE_URL)}${path}`, {
+    headers: baseOverride ? { 'x-apisports-key': env.API_FOOTBALL_KEY! } : headers,
+  });
   if (!res.ok) throw new Error(`API-Football error: ${res.status}`);
+  const remaining = parseInt(res.headers.get('x-ratelimit-requests-remaining') || '', 10);
+  const limit = parseInt(res.headers.get('x-ratelimit-requests-limit') || '', 10);
+  if (!baseOverride && Number.isFinite(remaining) && Number.isFinite(limit)) lastQuota = { remaining, limit };
   const body = (await res.json()) as { errors?: unknown; response?: any[] };
   const errs = body.errors;
   let msg: string | null = null;
@@ -128,6 +136,30 @@ function compactFixture(f: any) {
   };
 }
 
+// Autres sports : même compte et même clé API-Sports, une API (et un quota) par sport
+const SPORT_HOSTS: Record<string, string> = {
+  basketball: 'https://v1.basketball.api-sports.io',
+  rugby: 'https://v1.rugby.api-sports.io',
+  hockey: 'https://v1.hockey.api-sports.io',
+  handball: 'https://v1.handball.api-sports.io',
+};
+
+function compactGame(g: any) {
+  // Basket : scores.home = { total, quarter_1... } ; hockey/rugby/handball : scores.home = nombre
+  const score = (s: any): number | null => (typeof s === 'number' ? s : typeof s?.total === 'number' ? s.total : null);
+  return {
+    id: g.id,
+    date: g.date,
+    status: g.status?.short,
+    league: { id: g.league?.id, name: g.league?.name },
+    country: g.country?.name,
+    home: { id: g.teams?.home?.id, name: g.teams?.home?.name },
+    away: { id: g.teams?.away?.id, name: g.teams?.away?.name },
+    homeScore: score(g.scores?.home),
+    awayScore: score(g.scores?.away),
+  };
+}
+
 function safeTimeZone(tz: string | null): string {
   if (!tz || tz.length > 64) return 'UTC';
   try {
@@ -144,11 +176,12 @@ async function cachedApi(
   path: string,
   ttlSec: number,
   transform?: (f: any) => unknown,
-): Promise<{ data: unknown; cached: boolean }> {
+): Promise<{ data: unknown; cached: boolean; apiError?: string }> {
   const hit = await cacheGet(env, key, ttlSec);
   if (hit) return { data: hit, cached: true };
-  const raw = await callApi(env, path);
-  const data = transform ? raw.map(transform) : raw;
+  const { response, errors } = await callApiRaw(env, path);
+  if (errors && response.length === 0) return { data: [], cached: false, apiError: errors }; // pas de mise en cache d'une erreur
+  const data = transform ? response.map(transform) : response;
   await cacheSet(env, key, data, ttlSec);
   return { data, cached: false };
 }
@@ -644,6 +677,7 @@ export default {
         return json({
           configured,
           aiConfigured: hasAi(env),
+          quota: lastQuota,
           provider: env.API_FOOTBALL_KEY ? 'api-sports' : env.RAPIDAPI_KEY ? 'rapidapi' : 'demo-simulation',
           baseUrl: configured ? (env.RAPIDAPI_KEY ? RAPID_URL : BASE_URL) : null,
           message: configured
@@ -655,7 +689,15 @@ export default {
       if (url.pathname === '/api/fixtures/live') {
         if (!configured) return json({ success: true, fromRealApi: false, count: 0, fixtures: [] });
         const r = await cachedApi(env, 'fixtures_live_all_v2', '/fixtures?live=all', liveTtl, compactFixture);
-        return json({ success: true, fromRealApi: true, cached: r.cached, count: (r.data as any[]).length, data: r.data });
+        return json({
+          success: true,
+          fromRealApi: true,
+          cached: r.cached,
+          count: (r.data as any[]).length,
+          data: r.data,
+          apiError: r.apiError,
+          quota: lastQuota,
+        });
       }
 
       if (url.pathname === '/api/news') {
@@ -693,6 +735,30 @@ export default {
           },
           entries: h.entries.slice(0, 30),
         });
+      }
+
+      if (url.pathname === '/api/games') {
+        const sport = url.searchParams.get('sport') || '';
+        const host = SPORT_HOSTS[sport];
+        if (!host) return json({ success: false, error: 'Sport non pris en charge' }, 400);
+        if (!env.API_FOOTBALL_KEY) {
+          return json({ success: true, fromRealApi: false, data: [], apiError: 'Ce sport demande la clé API-Sports (API_FOOTBALL_KEY).' });
+        }
+        const date = url.searchParams.get('date') || '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ success: false, error: 'Date invalide' }, 400);
+        const diffDays = Math.abs(new Date(`${date}T12:00:00Z`).getTime() - Date.now()) / 86400000;
+        if (!(diffDays <= 8)) return json({ success: false, error: 'Date hors de la plage autorisée (±7 jours)' }, 400);
+        const tz = safeTimeZone(url.searchParams.get('tz'));
+        const todayInTz = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+        const ttl = date === todayInTz ? liveTtl : 3600;
+        const key = `games_${sport}_${date}_${tz}`;
+        const hit = await cacheGet(env, key, ttl);
+        if (hit) return json({ success: true, fromRealApi: true, cached: true, data: hit });
+        const { response, errors } = await callApiRaw(env, `/games?date=${date}&timezone=${encodeURIComponent(tz)}`, host);
+        if (errors && response.length === 0) return json({ success: true, fromRealApi: true, data: [], apiError: errors });
+        const compact = response.map(compactGame);
+        await cacheSet(env, key, compact, ttl);
+        return json({ success: true, fromRealApi: true, cached: false, data: compact });
       }
 
       if (url.pathname === '/api/fixtures/date') {
@@ -755,7 +821,7 @@ export default {
           `/${endpoint}?league=${leagueId}&season=${season}`,
           3600,
         );
-        return json({ success: true, fromRealApi: true, cached: r.cached, data: r.data });
+        return json({ success: true, fromRealApi: true, cached: r.cached, data: r.data, apiError: r.apiError });
       }
 
       return json({ success: false, error: 'Not found' }, 404);

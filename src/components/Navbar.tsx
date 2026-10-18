@@ -73,9 +73,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span className="capitalize truncate max-w-[72px] sm:max-w-none">{currentSport.name}</span>
-            <span className="px-1.5 py-0.2 text-[11px] font-bold rounded bg-red-600 text-white tabular-nums">
-              {currentSport.liveCount}
-            </span>
+            {currentSport.liveCount > 0 && (
+              <span className="px-1.5 py-0.2 text-[11px] font-bold rounded bg-red-600 text-white tabular-nums">
+                {currentSport.liveCount}
+              </span>
+            )}
             <ChevronDown className="w-4 h-4 text-slate-500" />
           </button>
         </div>

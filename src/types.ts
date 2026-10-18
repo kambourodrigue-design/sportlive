@@ -110,6 +110,7 @@ export interface Match {
     scorer: string;
     timestamp: number;
   };
+  periodLabel?: string; // ex. « Q3 », « P2 » (autres sports)
 }
 
 export interface League {

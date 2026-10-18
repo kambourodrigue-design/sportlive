@@ -134,16 +134,20 @@ export function mapApiFixture(item: any): Match {
   };
 }
 
-export async function fetchLiveFixturesFromApi(): Promise<{ fromRealApi: boolean; matches: Match[] }> {
+function friendlyApiError(raw: string): string {
+  return /limit|quota|requests/i.test(raw)
+    ? "Limite quotidienne de l'API atteinte (elle se remet à zéro à 00h00 UTC)."
+    : raw;
+}
+
+export async function fetchLiveFixturesFromApi(): Promise<{ fromRealApi: boolean; matches: Match[]; apiError?: string }> {
   try {
     const res = await fetch('/api/fixtures/live');
     if (!res.ok) throw new Error('Failed to fetch live fixtures');
     const json = await res.json();
-
-    if (!json.fromRealApi || !json.data || !Array.isArray(json.data) || json.data.length === 0) {
-      return { fromRealApi: false, matches: [] };
-    }
-    return { fromRealApi: true, matches: json.data.map(mapApiFixture) };
+    if (json.apiError) return { fromRealApi: true, matches: [], apiError: friendlyApiError(String(json.apiError)) };
+    if (!json.fromRealApi || !Array.isArray(json.data)) return { fromRealApi: false, matches: [] };
+    return { fromRealApi: true, matches: json.data.map(mapApiFixture) }; // liste vide = aucun match en direct
   } catch {
     return { fromRealApi: false, matches: [] };
   }
@@ -163,7 +167,7 @@ export async function fetchFixturesByDate(date: string): Promise<DayFixturesResu
     if (!res.ok) throw new Error('Failed to fetch fixtures');
     const json = await res.json();
     if (!json.success) return { ok: false, matches: [], apiError: json.error };
-    if (json.apiError) return { ok: false, matches: [], apiError: String(json.apiError) };
+    if (json.apiError) return { ok: false, matches: [], apiError: friendlyApiError(String(json.apiError)) };
     const data: unknown[] = Array.isArray(json.data) ? json.data : [];
     return { ok: true, matches: data.map(mapApiFixture) };
   } catch {

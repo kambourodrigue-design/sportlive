@@ -10,6 +10,7 @@ export function useLiveMatchEngine() {
   const [leagues, setLeagues] = useState<League[]>(INITIAL_LEAGUES);
   const [matches, setMatches] = useState<Match[]>(INITIAL_MATCHES);
   const [news] = useState<NewsArticle[]>(INITIAL_NEWS);
+  const [liveError, setLiveError] = useState<string | null>(null);
   const [apiStatus, setApiStatus] = useState<ApiFootballStatus>(() => {
     // Visites suivantes : on réutilise le dernier statut connu pour charger les vrais matchs tout de suite
     let known = false;
@@ -84,29 +85,37 @@ export function useLiveMatchEngine() {
 
     async function pollLiveApi() {
       const result = await fetchLiveFixturesFromApi();
-      if (isMounted && result.fromRealApi && result.matches.length > 0) {
-        setMatches((prev) => {
-          // Detect new goals to trigger notifications
-          result.matches.forEach((newMatch) => {
-            const oldMatch = prev.find((m) => m.id === newMatch.id);
-            if (oldMatch && (newMatch.score.home > oldMatch.score.home || newMatch.score.away > oldMatch.score.away)) {
-              const teamScored = newMatch.score.home > oldMatch.score.home ? newMatch.homeTeam.name : newMatch.awayTeam.name;
-              dispatchNotification({
-                matchId: newMatch.id,
-                type: 'GOAL',
-                title: `⚽ BUT EN DIRECT ! ${teamScored}`,
-                message: `Nouveau score : ${newMatch.homeTeam.shortName} ${newMatch.score.home} - ${newMatch.score.away} ${newMatch.awayTeam.shortName}`,
-                matchTitle: `${newMatch.homeTeam.name} vs ${newMatch.awayTeam.name}`,
-              });
-            }
-          });
+      if (!isMounted) return;
 
-          // Prepend or merge real matches with our catalogue
-          const realIds = new Set(result.matches.map((m) => m.id));
-          const nonDuplicatedPrev = prev.filter((m) => !realIds.has(m.id));
-          return [...result.matches, ...nonDuplicatedPrev];
-        });
+      if (result.apiError) {
+        // Erreur de l'API (ex. quota atteint) : on efface les anciens scores pour ne pas afficher de données périmées
+        setLiveError(result.apiError);
+        setMatches((prev) => prev.filter((m) => !m.id.startsWith('apif-')));
+        return;
       }
+      if (!result.fromRealApi) return; // réseau indisponible : on garde l'affichage actuel
+      setLiveError(null);
+
+      setMatches((prev) => {
+        // Détection des nouveaux buts pour les notifications
+        result.matches.forEach((newMatch) => {
+          const oldMatch = prev.find((m) => m.id === newMatch.id);
+          if (oldMatch && (newMatch.score.home > oldMatch.score.home || newMatch.score.away > oldMatch.score.away)) {
+            const teamScored = newMatch.score.home > oldMatch.score.home ? newMatch.homeTeam.name : newMatch.awayTeam.name;
+            dispatchNotification({
+              matchId: newMatch.id,
+              type: 'GOAL',
+              title: `⚽ BUT EN DIRECT ! ${teamScored}`,
+              message: `Nouveau score : ${newMatch.homeTeam.shortName} ${newMatch.score.home} - ${newMatch.score.away} ${newMatch.awayTeam.shortName}`,
+              matchTitle: `${newMatch.homeTeam.name} vs ${newMatch.awayTeam.name}`,
+            });
+          }
+        });
+
+        // Les vrais matchs sont remplacés en bloc : un match terminé ne reste plus « en direct »
+        const catalogue = prev.filter((m) => !m.id.startsWith('apif-'));
+        return [...result.matches, ...catalogue];
+      });
     }
 
     let interval: ReturnType<typeof setInterval> | undefined;
@@ -369,5 +378,6 @@ export function useLiveMatchEngine() {
     simulationSpeed,
     setSimulationSpeed,
     apiStatus,
+    liveError,
   };
 }

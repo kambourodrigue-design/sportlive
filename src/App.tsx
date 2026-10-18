@@ -86,40 +86,65 @@ export default function App() {
     simulationSpeed,
     setSimulationSpeed,
     apiStatus,
+    liveError,
   } = useLiveMatchEngine();
 
   const { news: liveNews, loaded: newsLoaded } = useNews();
 
   // Vrais matchs du jour choisi (si API configurée). Sinon : matchs de démonstration.
   const apiConfigured = apiStatus.configured;
-  const { dayMatches, loading: dayLoading, error: dayError } = useDayFixtures(selectedDate, apiConfigured);
+  const { dayMatches, loading: dayLoading, error: dayError } = useDayFixtures(selectedDate, apiConfigured, activeSport);
+
+  const isFootball = activeSport === 'football';
 
   const displayMatches = useMemo<Match[]>(() => {
-    if (!apiConfigured) return matches;
+    if (!apiConfigured) return matches.filter((m) => m.sportId === activeSport);
+    if (!isFootball) return dayMatches; // autres sports : données du jour via API-Sports
     const liveById = new Map<string, Match>(matches.filter((m) => m.id.startsWith('apif-')).map((m): [string, Match] => [m.id, m]));
     return dayMatches.map((m) => liveById.get(m.id) ?? m); // la version « direct » est plus fraîche
-  }, [apiConfigured, matches, dayMatches]);
+  }, [apiConfigured, matches, dayMatches, activeSport, isFootball]);
 
   // Championnats inconnus du catalogue : on les crée à la volée pour que leurs matchs s'affichent
   const displayLeagues = useMemo<League[]>(() => {
     const known = new Set(leagues.map((l) => l.id));
     const extra: League[] = [];
-    displayMatches.forEach((m) => {
+    const source =
+      apiConfigured && isFootball ? [...displayMatches, ...matches.filter((m) => m.id.startsWith('apif-'))] : displayMatches;
+    source.forEach((m) => {
       if (!known.has(m.leagueId)) {
         known.add(m.leagueId);
         extra.push({ id: m.leagueId, name: m.leagueName, country: m.leagueCountry, flag: m.leagueFlag, order: 1000 + extra.length });
       }
     });
     return [...leagues, ...extra];
-  }, [leagues, displayMatches]);
+  }, [leagues, displayMatches, matches, apiConfigured, isFootball]);
+
+  // La fiche détaillée (stats, compositions) n'existe que pour le football
+  const handleSelectMatch = (m: Match) => {
+    if (m.sportId === 'football') setSelectedMatch(m);
+  };
 
   // Counts
   // Direct : toujours les vrais matchs en cours (quel que soit le jour choisi) quand l'API est configurée
-  const liveMatches = apiConfigured
-    ? matches.filter((m) => m.id.startsWith('apif-') && m.isLive)
-    : displayMatches.filter((m) => m.isLive);
+  const liveMatches =
+    apiConfigured && isFootball
+      ? matches.filter((m) => m.id.startsWith('apif-') && m.isLive)
+      : displayMatches.filter((m) => m.isLive);
   const liveMatchesCount = liveMatches.length;
   const totalMatchesCount = displayMatches.length;
+
+  // Compteurs réels du sport affiché ; les autres ne sont pas connus (on n'affiche plus de faux chiffres)
+  const uiSports = useMemo(
+    () =>
+      apiConfigured
+        ? sports.map((s) =>
+            s.id === activeSport
+              ? { ...s, liveCount: liveMatches.length, totalCount: displayMatches.length }
+              : { ...s, liveCount: 0, totalCount: 0 },
+          )
+        : sports,
+    [sports, apiConfigured, activeSport, liveMatches.length, displayMatches.length],
+  );
   const unreadNotificationsCount = notifications.filter((n) => !n.read).length;
 
   const handleCycleSpeed = () => {
@@ -143,7 +168,7 @@ export default function App() {
       
       {/* Top App Bar */}
       <Navbar
-        sports={sports}
+        sports={uiSports}
         activeSport={activeSport}
         onOpenSportSelector={() => setIsSportSelectorOpen(true)}
         onOpenSearch={() => setIsSearchOpen(true)}
@@ -199,7 +224,7 @@ export default function App() {
               favoriteMatchIds={favoriteMatchIds}
               onToggleFavoriteMatch={toggleFavoriteMatch}
               onToggleFavoriteLeague={toggleFavoriteLeague}
-              onSelectMatch={setSelectedMatch}
+              onSelectMatch={handleSelectMatch}
               onOpenLeagueStandings={(leagueId) => {
                 setSelectedStandingsLeagueId(leagueId);
                 setActiveTab('classements');
@@ -232,13 +257,19 @@ export default function App() {
               </div>
             </div>
 
+            {(liveError || (!isFootball && dayError)) && (
+              <p className="max-w-7xl mx-auto px-4 pt-3 text-xs text-red-600 dark:text-red-300" role="alert">
+                Scores en direct indisponibles : {liveError ?? dayError}
+              </p>
+            )}
+
             <MatchList
               leagues={displayLeagues}
-              matches={apiConfigured ? liveMatches : displayMatches}
+              matches={apiConfigured ? liveMatches : displayMatches.filter((m) => m.isLive)}
               favoriteMatchIds={favoriteMatchIds}
               onToggleFavoriteMatch={toggleFavoriteMatch}
               onToggleFavoriteLeague={toggleFavoriteLeague}
-              onSelectMatch={setSelectedMatch}
+              onSelectMatch={handleSelectMatch}
               onOpenLeagueStandings={(leagueId) => {
                 setSelectedStandingsLeagueId(leagueId);
                 setActiveTab('classements');
@@ -276,7 +307,7 @@ export default function App() {
               favoriteMatchIds={favoriteMatchIds}
               onToggleFavoriteMatch={toggleFavoriteMatch}
               onToggleFavoriteLeague={toggleFavoriteLeague}
-              onSelectMatch={setSelectedMatch}
+              onSelectMatch={handleSelectMatch}
               onOpenLeagueStandings={(leagueId) => {
                 setSelectedStandingsLeagueId(leagueId);
                 setActiveTab('classements');
@@ -319,7 +350,7 @@ export default function App() {
       <SportSelectorModal
         isOpen={isSportSelectorOpen}
         onClose={() => setIsSportSelectorOpen(false)}
-        sports={sports}
+        sports={uiSports}
         activeSport={activeSport}
         onSelectSport={setActiveSport}
       />
@@ -354,7 +385,7 @@ export default function App() {
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
         matches={displayMatches}
-        onSelectMatch={setSelectedMatch}
+        onSelectMatch={handleSelectMatch}
       />
 
     </div>

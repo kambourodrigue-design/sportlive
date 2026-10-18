@@ -13,7 +13,7 @@
   "triggers": { "crons": ["*/30 * * * *", "0 7,13 * * *"] },
   "kv_namespaces": [{ "binding": "CACHE", "id": "650fea3483e14ac59346a5d40012ff6d" }],
   "vars": {
-    // Test solo : 60. Plan gratuit API-Football (100 req/jour) en usage public : 1200.
+    // Test : 60. Plan gratuit API-Football (100 req/jour) en usage public : 1200. Plan payant : 60.
     "LIVE_CACHE_SECONDS": "60"
   }
 }

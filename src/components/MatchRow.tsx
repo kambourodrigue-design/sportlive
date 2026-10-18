@@ -45,7 +45,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({
     return (
       <span className="flex items-center gap-1 text-xs font-bold text-red-600 dark:text-red-500 tabular-nums whitespace-nowrap">
         <span className="w-1.5 h-1.5 rounded-full bg-red-600 dark:bg-red-500 animate-ping inline-block" />
-        {match.minute}&apos;
+        {match.periodLabel ?? `${match.minute}'`}
       </span>
     );
   };
