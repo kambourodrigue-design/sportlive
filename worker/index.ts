@@ -15,6 +15,7 @@ interface Env {
   DEEPSEEK_MODEL?: string;
   AI_PRIMARY?: string; // 'deepseek' (défaut) ou 'claude' : modèle essayé en premier
   PICKS_CACHE_SECONDS?: string;
+  NEWS_CACHE_SECONDS?: string;
   CACHE?: KV;
 }
 
@@ -102,6 +103,31 @@ async function callApi(env: Env, path: string): Promise<any[]> {
   return (await callApiRaw(env, path)).response;
 }
 
+// Ne garde que les champs utilisés par l'app : réponse ~5x plus légère (le direct mondial pèse très lourd)
+function compactFixture(f: any) {
+  const team = (t: any) => ({ id: t?.id, name: t?.name, logo: t?.logo ? '1' : '' });
+  return {
+    fixture: {
+      id: f.fixture?.id,
+      date: f.fixture?.date,
+      referee: f.fixture?.referee,
+      venue: { name: f.fixture?.venue?.name },
+      status: { short: f.fixture?.status?.short, elapsed: f.fixture?.status?.elapsed },
+    },
+    league: { id: f.league?.id, name: f.league?.name, country: f.league?.country, flag: f.league?.flag ? '1' : '', round: f.league?.round },
+    teams: { home: team(f.teams?.home), away: team(f.teams?.away) },
+    goals: { home: f.goals?.home, away: f.goals?.away },
+    events: (f.events || []).map((e: any) => ({
+      type: e.type,
+      detail: e.detail,
+      time: { elapsed: e.time?.elapsed },
+      team: { id: e.team?.id },
+      player: { name: e.player?.name },
+      assist: { name: e.assist?.name },
+    })),
+  };
+}
+
 function safeTimeZone(tz: string | null): string {
   if (!tz || tz.length > 64) return 'UTC';
   try {
@@ -112,14 +138,117 @@ function safeTimeZone(tz: string | null): string {
   }
 }
 
-async function cachedApi(env: Env, key: string, path: string, ttlSec: number): Promise<{ data: unknown; cached: boolean }> {
+async function cachedApi(
+  env: Env,
+  key: string,
+  path: string,
+  ttlSec: number,
+  transform?: (f: any) => unknown,
+): Promise<{ data: unknown; cached: boolean }> {
   const hit = await cacheGet(env, key, ttlSec);
   if (hit) return { data: hit, cached: true };
-  const data = await callApi(env, path);
+  const raw = await callApi(env, path);
+  const data = transform ? raw.map(transform) : raw;
   await cacheSet(env, key, data, ttlSec);
   return { data, cached: false };
 }
 
+
+// ---------------------------------------------------------------------------
+// Actualités : flux RSS gratuits de Maxifoot (titre + court extrait + lien vers l'article d'origine)
+// ---------------------------------------------------------------------------
+const NEWS_FEEDS = [
+  { url: 'http://rss.maxifoot.com/football-general.xml', category: 'FOOTBALL' },
+  { url: 'http://rss.maxifoot.com/football-transfert.xml', category: 'MERCATO' },
+  { url: 'http://rss.maxifoot.com/football-ligue-champion.xml', category: 'EUROPE' },
+  { url: 'http://rss.maxifoot.com/football-equipe-france.xml', category: 'ÉQUIPE DE FRANCE' },
+];
+const MAX_NEWS = 40;
+
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', hellip: '…', laquo: '«', raquo: '»',
+  rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', euro: '€', ndash: '–', mdash: '—',
+  eacute: 'é', egrave: 'è', ecirc: 'ê', euml: 'ë', agrave: 'à', acirc: 'â', auml: 'ä', ccedil: 'ç',
+  icirc: 'î', iuml: 'ï', ocirc: 'ô', ouml: 'ö', ugrave: 'ù', ucirc: 'û', uuml: 'ü',
+  Eacute: 'É', Egrave: 'È', Ecirc: 'Ê', Agrave: 'À', Ccedil: 'Ç', Ocirc: 'Ô',
+};
+
+function decodeEntities(input: string): string {
+  const once = (s: string) =>
+    s.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (m, code: string) => {
+      if (code[0] === '#') {
+        const n = code[1] === 'x' || code[1] === 'X' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+        return Number.isFinite(n) && n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
+      }
+      return NAMED_ENTITIES[code] ?? m;
+    });
+  return once(once(input)); // le flux contient parfois des entités encodées deux fois (&amp;eacute;)
+}
+
+function xmlTag(block: string, name: string): string {
+  const m = block.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`));
+  return m ? m[1].replace(/^\s*<!\[CDATA\[/, '').replace(/\]\]>\s*$/, '').trim() : '';
+}
+
+function cleanSnippet(raw: string): string {
+  let t = decodeEntities(raw).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  t = t.replace(/&[a-zA-Z#0-9]*\.{2,}$/, '…').replace(/\.{3,}$/, '…'); // fin tronquée par le flux
+  return t.length > 240 ? `${t.slice(0, 237).trimEnd()}…` : t;
+}
+
+interface NewsItem {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  link: string;
+  publishedAt: string;
+  source: string;
+}
+
+function parseRss(xml: string, category: string): NewsItem[] {
+  const items: NewsItem[] = [];
+  for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+    const block = m[1];
+    const title = decodeEntities(xmlTag(block, 'title')).replace(/<[^>]*>/g, '').trim();
+    const link = xmlTag(block, 'link');
+    let host = '';
+    try {
+      const u = new URL(link);
+      host = u.protocol === 'https:' || u.protocol === 'http:' ? u.hostname : '';
+    } catch {
+      /* lien invalide */
+    }
+    if (!title || !host.endsWith('maxifoot.fr')) continue; // on n'accepte que des liens vers le site source
+    const date = new Date(xmlTag(block, 'pubDate'));
+    items.push({
+      id: link,
+      title,
+      summary: cleanSnippet(xmlTag(block, 'description')),
+      category,
+      link,
+      publishedAt: Number.isNaN(date.getTime()) ? new Date(0).toISOString() : date.toISOString(),
+      source: 'Maxifoot',
+    });
+  }
+  return items;
+}
+
+async function loadNews(): Promise<NewsItem[]> {
+  const settled = await Promise.allSettled(
+    NEWS_FEEDS.map(async (f) => {
+      const res = await fetch(f.url, { headers: { 'user-agent': 'FlashScoreNext/1.0 (+rss reader)' } });
+      if (!res.ok) throw new Error(`RSS ${res.status}`);
+      return parseRss(await res.text(), f.category);
+    }),
+  );
+  const seen = new Set<string>();
+  return settled
+    .flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+    .filter((n) => (seen.has(n.link) ? false : (seen.add(n.link), true))) // un article présent dans 2 flux n'apparaît qu'une fois
+    .slice(0, MAX_NEWS);
+}
 
 // ---------------------------------------------------------------------------
 // Historique des pronostics + taux de réussite (stocké dans le KV)
@@ -417,6 +546,62 @@ async function askAi(env: Env, candidates: Candidate[]): Promise<{ picks: AiPick
   throw lastError;
 }
 
+const PICKS_LATEST_KEY = 'picks_latest_v1';
+let memLatest: { ts: number; picks: any[] } | null = null;
+let picksRefreshing = false;
+
+async function loadLatestPicks(env: Env): Promise<{ ts: number; picks: any[] } | null> {
+  if (env.CACHE) {
+    try {
+      const raw = await env.CACHE.get(PICKS_LATEST_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {
+      /* repli mémoire */
+    }
+  }
+  return memLatest;
+}
+
+function picksTtlSeconds(env: Env): number {
+  return Math.max(60, parseInt(env.PICKS_CACHE_SECONDS || '21600', 10)); // 6 h par défaut
+}
+
+// Génère les pronostics, les enregistre dans l'historique et garde une copie « dernière version connue »
+async function refreshPicks(env: Env): Promise<any[]> {
+  const picks = (await buildPicks(env)) as any[];
+  if (picks.length) {
+    await recordHistory(env, picks);
+    memLatest = { ts: Date.now(), picks };
+    if (env.CACHE) {
+      try {
+        await env.CACHE.put(PICKS_LATEST_KEY, JSON.stringify(memLatest)); // sans expiration
+      } catch {
+        /* non bloquant */
+      }
+    }
+  }
+  await cacheSet(env, `picks_${isoDay(new Date())}`, picks, picks.length ? picksTtlSeconds(env) : 1800);
+  return picks;
+}
+
+// Tâche planifiée (cron) : règle les résultats même sans visiteur, et prépare les pronostics du jour
+async function runCron(env: Env, cron: string): Promise<void> {
+  if (!isConfigured(env)) return;
+  try {
+    await settleHistory(env, await loadHistory(env));
+  } catch {
+    /* on réessaiera */
+  }
+  if (cron.includes('7,13') && hasAi(env)) {
+    try {
+      const hit = await cacheGet(env, `picks_${isoDay(new Date())}`, picksTtlSeconds(env));
+      if (!hit) await refreshPicks(env);
+    } catch {
+      /* non bloquant */
+    }
+  }
+}
+
 async function buildPicks(env: Env): Promise<unknown[]> {
   const candidates = await loadCandidates(env);
   if (candidates.length === 0) return [];
@@ -445,7 +630,11 @@ async function buildPicks(env: Env): Promise<unknown[]> {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async scheduled(event: { cron: string }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
+    ctx.waitUntil(runCron(env, event.cron));
+  },
+
+  async fetch(request: Request, env: Env, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
     const configured = isConfigured(env);
     const liveTtl = Math.max(15, parseInt(env.LIVE_CACHE_SECONDS || '60', 10));
@@ -465,8 +654,17 @@ export default {
 
       if (url.pathname === '/api/fixtures/live') {
         if (!configured) return json({ success: true, fromRealApi: false, count: 0, fixtures: [] });
-        const r = await cachedApi(env, 'fixtures_live_all', '/fixtures?live=all', liveTtl);
+        const r = await cachedApi(env, 'fixtures_live_all_v2', '/fixtures?live=all', liveTtl, compactFixture);
         return json({ success: true, fromRealApi: true, cached: r.cached, count: (r.data as any[]).length, data: r.data });
+      }
+
+      if (url.pathname === '/api/news') {
+        const ttl = Math.max(60, parseInt(env.NEWS_CACHE_SECONDS || '900', 10)); // 15 min par défaut
+        const hit = await cacheGet(env, 'news_v1', ttl);
+        if (hit) return json({ success: true, cached: true, source: 'Maxifoot', items: hit });
+        const items = await loadNews();
+        if (items.length) await cacheSet(env, 'news_v1', items, ttl);
+        return json({ success: true, cached: false, source: 'Maxifoot', items });
       }
 
       if (url.pathname === '/api/picks/history') {
@@ -506,25 +704,35 @@ export default {
         const tz = safeTimeZone(url.searchParams.get('tz'));
         const todayInTz = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
         const ttl = date === todayInTz ? liveTtl : 3600;
-        const key = `fixtures_date_${date}_${tz}`;
+        const key = `fixtures_date_v2_${date}_${tz}`;
         const hit = await cacheGet(env, key, ttl);
         if (hit) return json({ success: true, fromRealApi: true, cached: true, data: hit });
         const { response, errors } = await callApiRaw(env, `/fixtures?date=${date}&timezone=${encodeURIComponent(tz)}`);
         if (errors && response.length === 0) return json({ success: true, fromRealApi: true, data: [], apiError: errors });
-        await cacheSet(env, key, response, ttl);
-        return json({ success: true, fromRealApi: true, cached: false, data: response });
+        const compact = response.map(compactFixture);
+        await cacheSet(env, key, compact, ttl);
+        return json({ success: true, fromRealApi: true, cached: false, data: compact });
       }
 
       if (url.pathname === '/api/picks') {
         if (!configured) return json({ success: true, fromRealApi: false, aiConfigured: hasAi(env), picks: [] });
         if (!hasAi(env)) return json({ success: true, fromRealApi: true, aiConfigured: false, picks: [] });
-        const picksTtl = Math.max(60, parseInt(env.PICKS_CACHE_SECONDS || '21600', 10)); // 6 h par défaut
-        const key = `picks_${isoDay(new Date())}`;
-        const hit = await cacheGet(env, key, picksTtl);
+        const hit = await cacheGet(env, `picks_${isoDay(new Date())}`, picksTtlSeconds(env));
         if (hit) return json({ success: true, fromRealApi: true, aiConfigured: true, cached: true, picks: hit });
-        const picks = await buildPicks(env);
-        if (picks.length) await recordHistory(env, picks);
-        await cacheSet(env, key, picks, picks.length ? picksTtl : 1800); // liste vide : on réessaie dans 30 min
+
+        // Cache expiré : on répond tout de suite avec la dernière version connue et on rafraîchit en arrière-plan
+        const latest = await loadLatestPicks(env);
+        const usable = latest && Date.now() - latest.ts < 36 * 3600e3
+          ? latest.picks.filter((p) => new Date(p.kickoff).getTime() > Date.now() - 3 * 3600e3)
+          : [];
+        if (usable.length > 0 && ctx) {
+          if (!picksRefreshing) {
+            picksRefreshing = true;
+            ctx.waitUntil(refreshPicks(env).catch(() => []).finally(() => { picksRefreshing = false; }));
+          }
+          return json({ success: true, fromRealApi: true, aiConfigured: true, cached: true, stale: true, picks: usable });
+        }
+        const picks = await refreshPicks(env);
         return json({ success: true, fromRealApi: true, aiConfigured: true, cached: false, picks });
       }
 

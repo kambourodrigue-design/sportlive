@@ -52,11 +52,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 w-full fs-bar fs-bar-top border-b transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
+      <div className="max-w-7xl mx-auto px-2 sm:px-6 h-16 flex items-center justify-between gap-1 sm:gap-4">
         
         {/* Left: Brand + Sport selector button */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="hidden min-[420px]:flex items-center gap-2">
             <span className="font-extrabold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
               <span className="w-8 h-8 rounded-lg fs-logo text-white flex items-center justify-center font-black text-lg font-display">
                 F
@@ -68,11 +68,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Sport Selector Trigger (Matching Screenshot 1) */}
           <button
             onClick={onOpenSportSelector}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700/80 transition-all text-slate-900 dark:text-slate-100 text-sm font-semibold border border-slate-200/60 dark:border-slate-700"
+            className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 min-w-0 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700/80 transition-all text-slate-900 dark:text-slate-100 text-sm font-semibold border border-slate-200/60 dark:border-slate-700"
             title="Changer de sport"
           >
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="capitalize">{currentSport.name}</span>
+            <span className="capitalize truncate max-w-[72px] sm:max-w-none">{currentSport.name}</span>
             <span className="px-1.5 py-0.2 text-[11px] font-bold rounded bg-red-600 text-white tabular-nums">
               {currentSport.liveCount}
             </span>
@@ -81,7 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Center / Right: Action buttons */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-0.5 sm:gap-2 shrink-0">
           
           {/* Quick Simulation Trigger */}
           <div className="hidden md:flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
@@ -115,7 +115,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Search Trigger */}
           <button
             onClick={onOpenSearch}
-            className="p-2 sm:px-3 sm:py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5 text-sm"
+            className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5 text-sm"
             aria-label="Rechercher des équipes ou matchs"
           >
             <Search className="w-4 h-4" />
@@ -125,7 +125,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Theme Switcher (Light / Dark Mode) */}
           <button
             onClick={onToggleTheme}
-            className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 sm:p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             aria-label={isDarkMode ? "Activer le mode clair" : "Activer le mode nuit"}
             title={isDarkMode ? "Passer en mode clair" : "Passer en mode nuit"}
           >
@@ -139,7 +139,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Notification Center Trigger */}
           <button
             onClick={onOpenNotifications}
-            className="relative p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="relative p-1.5 sm:p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             aria-label="Notifications en direct"
             title="Historique des alertes en direct"
           >
@@ -154,7 +154,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Notification Settings Modal Trigger */}
           <button
             onClick={onOpenSettings}
-            className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 sm:p-2 max-[340px]:hidden rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             aria-label="Paramètres des alertes"
             title="Personnaliser les alertes sonores et visuelles"
           >

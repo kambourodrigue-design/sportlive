@@ -155,6 +155,9 @@ export interface NewsArticle {
   author: string;
   views: number;
   content: string[];
+  sourceUrl?: string; // lien vers l'article d'origine
+  sourceName?: string;
+  publishedAt?: string;
 }
 
 export interface NotificationSettings {

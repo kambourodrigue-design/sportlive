@@ -17,7 +17,11 @@ const IS_PROD = process.env.NODE_ENV === 'production' || process.argv.includes('
 app.all('/api/*', async (req, res) => {
   try {
     const request = new Request(`http://${req.headers.host || 'localhost'}${req.originalUrl}`, { method: req.method });
-    const response = await worker.fetch(request, process.env as never);
+    const response = await worker.fetch(request, process.env as never, {
+      waitUntil: (p: Promise<unknown>) => {
+        p.catch(() => {});
+      },
+    });
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
     res.send(Buffer.from(await response.arrayBuffer()));

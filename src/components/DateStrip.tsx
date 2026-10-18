@@ -62,7 +62,7 @@ export const DateStrip: React.FC<DateStripProps> = ({
       </div>
 
       {/* Summary Filter Strip (Matching Screenshot 4) */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <ListFilter className="w-4 h-4 text-slate-500" />
           <h1 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -77,7 +77,7 @@ export const DateStrip: React.FC<DateStripProps> = ({
         </div>
 
         {/* Quick Segmented Filter */}
-        <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg text-xs font-semibold">
+        <div className="flex items-center max-w-full overflow-x-auto scrollbar-none bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg text-xs font-semibold whitespace-nowrap">
           <button
             onClick={() => onChangeFilter('all')}
             className={`px-2.5 py-1 rounded-md transition-colors ${

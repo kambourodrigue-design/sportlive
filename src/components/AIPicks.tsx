@@ -1,17 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, Clock } from 'lucide-react';
-import { fetchPicks, PicksResult } from '../services/picks';
+import { fetchPicks, readCachedPicks, PicksResult } from '../services/picks';
 import { PicksHistory } from './PicksHistory';
 
 const formatKickoff = (iso: string) =>
   new Date(iso).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
 export const AIPicks: React.FC = () => {
-  const [result, setResult] = useState<PicksResult | null>(null);
+  const [result, setResult] = useState<PicksResult | null>(() => readCachedPicks());
 
   useEffect(() => {
     let alive = true;
-    fetchPicks().then((r) => alive && setResult(r));
+    fetchPicks().then((r) => {
+      if (!alive) return;
+      // En cas d'erreur réseau, on garde les pronostics déjà affichés
+      setResult((prev) => (r.state === 'error' && prev?.state === 'ok' ? prev : r));
+    });
     return () => {
       alive = false;
     };
@@ -87,6 +91,11 @@ export const AIPicks: React.FC = () => {
                 </div>
 
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{p.reasoning}</p>
+                {p.model && (
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                    Analysé par {p.model === 'claude' ? 'Claude' : 'DeepSeek'}
+                  </p>
+                )}
               </article>
             ))}
           </div>
@@ -96,7 +105,7 @@ export const AIPicks: React.FC = () => {
           Analyses indicatives générées par IA, sans aucune garantie de résultat. Jouez de façon responsable.
         </p>
 
-        <PicksHistory />
+        <PicksHistory reloadKey={result?.state ?? 'loading'} />
       </div>
     </section>
   );

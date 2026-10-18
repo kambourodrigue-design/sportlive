@@ -17,7 +17,7 @@ export const InstallButton: React.FC = () => {
     <>
       <button
         onClick={handleClick}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white fs-logo hover:brightness-110 transition"
+        className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-bold text-white fs-logo hover:brightness-110 transition"
         aria-label="Installer l'application"
         title="Installer l'application sur votre écran d'accueil"
       >

@@ -16,7 +16,7 @@ const RESULT_STYLE: Record<HistoryEntry['result'], string> = {
   void: 'bg-slate-500/10 text-slate-500 dark:text-slate-400',
 };
 
-export const PicksHistory: React.FC = () => {
+export const PicksHistory: React.FC<{ reloadKey?: string }> = ({ reloadKey }) => {
   const [data, setData] = useState<{ stats: HistoryStats; entries: HistoryEntry[] } | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -26,7 +26,7 @@ export const PicksHistory: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   if (!data || data.stats.total === 0) return null;
   const { stats, entries } = data;
@@ -61,6 +61,14 @@ export const PicksHistory: React.FC = () => {
             {stats.won} gagnés, {stats.lost} perdus, {stats.pending} en attente
             {stats.void > 0 ? `, ${stats.void} annulés` : ''}. Les paris sont jugés sur le score à 90 minutes.
           </p>
+          {stats.byModel && stats.byModel.length > 0 && (
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+              Par modèle :{' '}
+              {stats.byModel
+                .map((m) => `${m.model === 'claude' ? 'Claude' : 'DeepSeek'} ${m.rate}% (${m.won + m.lost} réglés)`)
+                .join(' · ')}
+            </p>
+          )}
           <ul className="divide-y divide-slate-200/60 dark:divide-white/5">
             {entries.map((e) => (
               <li key={e.fixtureId} className="py-2 flex items-center justify-between gap-3">

@@ -34,6 +34,7 @@
 
 @layer base {
   body {
+    overflow-x: clip; /* filet de sécurité : jamais de défilement horizontal de la page */
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

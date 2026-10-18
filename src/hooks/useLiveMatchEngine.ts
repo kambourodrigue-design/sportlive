@@ -10,11 +10,20 @@ export function useLiveMatchEngine() {
   const [leagues, setLeagues] = useState<League[]>(INITIAL_LEAGUES);
   const [matches, setMatches] = useState<Match[]>(INITIAL_MATCHES);
   const [news] = useState<NewsArticle[]>(INITIAL_NEWS);
-  const [apiStatus, setApiStatus] = useState<ApiFootballStatus>({
-    configured: false,
-    provider: 'demo-simulation',
-    baseUrl: null,
-    message: 'Chargement du statut API...',
+  const [apiStatus, setApiStatus] = useState<ApiFootballStatus>(() => {
+    // Visites suivantes : on réutilise le dernier statut connu pour charger les vrais matchs tout de suite
+    let known = false;
+    try {
+      known = localStorage.getItem('fsn_api_configured') === '1';
+    } catch {
+      /* ignoré */
+    }
+    return {
+      configured: known,
+      provider: known ? 'api-sports' : 'demo-simulation',
+      baseUrl: null,
+      message: 'Chargement du statut API...',
+    };
   });
   
   // Favorites persisted in localStorage
@@ -62,6 +71,11 @@ export function useLiveMatchEngine() {
 
     async function checkStatus() {
       const status = await checkApiFootballStatus();
+      try {
+        localStorage.setItem('fsn_api_configured', status.configured ? '1' : '0');
+      } catch {
+        /* ignoré */
+      }
       if (isMounted) {
         setApiStatus(status);
       }

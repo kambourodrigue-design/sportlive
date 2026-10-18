@@ -9,6 +9,8 @@
     "run_worker_first": ["/api/*"]
   },
   // Cache partagé entre visiteurs (protège le quota API-Football) : KV existant sportlive-cache
+  // Tâches automatiques : résultats des pronostics (toutes les 30 min), génération des pronostics (7h et 13h UTC)
+  "triggers": { "crons": ["*/30 * * * *", "0 7,13 * * *"] },
   "kv_namespaces": [{ "binding": "CACHE", "id": "650fea3483e14ac59346a5d40012ff6d" }],
   "vars": {
     // Test solo : 60. Plan gratuit API-Football (100 req/jour) en usage public : 1200.

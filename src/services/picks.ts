@@ -6,6 +6,7 @@ export interface AiPick {
   away: string;
   percent: { home: number; draw: number; away: number };
   market: string;
+  model?: string;
   confidence: number;
   reasoning: string;
 }
@@ -13,6 +14,20 @@ export interface AiPick {
 export interface PicksResult {
   state: 'ok' | 'empty' | 'demo' | 'no-ai' | 'error';
   picks: AiPick[];
+}
+
+const PICKS_CACHE_KEY = 'fsn_picks_cache_v1';
+
+export function readCachedPicks(): PicksResult | null {
+  try {
+    const raw = localStorage.getItem(PICKS_CACHE_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw) as { ts: number; picks: AiPick[] };
+    const fresh = Date.now() - c.ts < 12 * 3600e3 && c.picks.length > 0;
+    return fresh ? { state: 'ok', picks: c.picks } : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchPicks(): Promise<PicksResult> {
@@ -24,6 +39,13 @@ export async function fetchPicks(): Promise<PicksResult> {
     if (!json.fromRealApi) return { state: 'demo', picks: [] };
     if (!json.aiConfigured) return { state: 'no-ai', picks: [] };
     const picks: AiPick[] = Array.isArray(json.picks) ? json.picks : [];
+    if (picks.length) {
+      try {
+        localStorage.setItem(PICKS_CACHE_KEY, JSON.stringify({ ts: Date.now(), picks }));
+      } catch {
+        /* ignoré */
+      }
+    }
     return { state: picks.length ? 'ok' : 'empty', picks };
   } catch {
     return { state: 'error', picks: [] };
@@ -49,6 +71,7 @@ export interface HistoryStats {
   pending: number;
   void: number;
   rate: number | null; // % de réussite sur les pronostics réglés
+  byModel?: { model: string; won: number; lost: number; rate: number | null }[];
 }
 
 export async function fetchPicksHistory(): Promise<{ stats: HistoryStats; entries: HistoryEntry[] } | null> {

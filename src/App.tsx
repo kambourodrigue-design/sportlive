@@ -15,6 +15,7 @@ import { SearchModal } from './components/SearchModal';
 import { LiveToast } from './components/LiveToast';
 import { AIPicks } from './components/AIPicks';
 import { useDayFixtures } from './hooks/useDayFixtures';
+import { useNews } from './hooks/useNews';
 import { BottomNavigation } from './components/BottomNavigation';
 import { Match, MainNavTab, League } from './types';
 import { toLocalISODate } from './utils/date';
@@ -86,6 +87,8 @@ export default function App() {
     setSimulationSpeed,
     apiStatus,
   } = useLiveMatchEngine();
+
+  const { news: liveNews, loaded: newsLoaded } = useNews();
 
   // Vrais matchs du jour choisi (si API configurée). Sinon : matchs de démonstration.
   const apiConfigured = apiStatus.configured;
@@ -211,19 +214,21 @@ export default function App() {
           <div>
             {/* Live Header Banner */}
             <div className="bg-red-600 text-white px-4 py-3 shadow-sm">
-              <div className="max-w-7xl mx-auto flex items-center justify-between">
+              <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
                   <h2 className="text-sm font-extrabold uppercase tracking-wide">
                     Matchs en direct ({liveMatchesCount})
                   </h2>
                 </div>
-                <button
-                  onClick={() => triggerGoalSimulation()}
-                  className="px-2.5 py-1 text-xs font-bold rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors"
-                >
-                  ⚡ Simuler un but en direct
-                </button>
+                {!apiConfigured && (
+                  <button
+                    onClick={() => triggerGoalSimulation()}
+                    className="px-2.5 py-1 text-xs font-bold rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors"
+                  >
+                    ⚡ Simuler un but en direct
+                  </button>
+                )}
               </div>
             </div>
 
@@ -284,7 +289,7 @@ export default function App() {
 
         {/* TAB: ACTUALITÉS */}
         {activeTab === 'actualites' && (
-          <NewsSection news={news} />
+          <NewsSection news={liveNews} loaded={newsLoaded} />
         )}
 
         {/* TAB: CLASSEMENTS / CHAMPIONNATS */}
