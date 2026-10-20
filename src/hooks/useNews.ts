@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
 import { NewsArticle } from '../types';
 import { fetchNews, readCachedNews } from '../services/news';
+import { fetchOwnArticles, readCachedOwnArticles } from '../services/articles';
 
-// Vraies actualités (flux RSS). Affichage immédiat des dernières connues, puis mise à jour toutes les 10 min.
+// Actualités = articles de la rédaction (en premier, lisibles dans l'app) + flux RSS (titre, extrait, lien).
+// Affichage immédiat des dernières données connues, puis mise à jour toutes les 10 min.
 export function useNews() {
-  const [news, setNews] = useState<NewsArticle[]>(() => readCachedNews());
+  const [rss, setRss] = useState<NewsArticle[]>(() => readCachedNews());
+  const [own, setOwn] = useState<NewsArticle[]>(() => readCachedOwnArticles());
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let alive = true;
     async function load() {
-      const items = await fetchNews();
+      const [feed, house] = await Promise.all([fetchNews(), fetchOwnArticles()]);
       if (!alive) return;
-      if (items) setNews(items);
+      if (feed) setRss(feed);
+      if (house) setOwn(house);
       setLoaded(true);
     }
     load();
@@ -23,5 +27,5 @@ export function useNews() {
     };
   }, []);
 
-  return { news, loaded };
+  return { news: [...own, ...rss], loaded };
 }

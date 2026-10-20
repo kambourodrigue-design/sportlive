@@ -2,7 +2,7 @@ import { NewsArticle } from '../types';
 
 const CACHE_KEY = 'fsn_news_cache_v1';
 
-function timeAgo(iso: string): string {
+export function timeAgo(iso: string): string {
   const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   if (minutes < 1) return "À l'instant";
   if (minutes < 60) return `Il y a ${minutes} min`;

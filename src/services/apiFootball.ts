@@ -1,4 +1,4 @@
-import { Match, MatchStatus } from '../types';
+import { Match, MatchEvent, MatchStatus } from '../types';
 import { toLocalISODate } from '../utils/date';
 
 export interface ApiFootballStatus {
@@ -64,6 +64,25 @@ function mapStatus(short: string): MatchStatus {
   }
 }
 
+// Événement API-Football -> événement de l'app (buts, cartons, remplacements, VAR)
+export function mapApiEvent(ev: any, fixtureId: unknown, index: number, homeTeamId: unknown): MatchEvent | null {
+  let type: MatchEvent['type'] | null = null;
+  if (ev.type === 'Goal') type = ev.detail === 'Missed Penalty' ? 'PENALTY_MISSED' : 'GOAL';
+  else if (ev.type === 'Card') type = String(ev.detail).includes('Red') ? 'RED_CARD' : 'YELLOW_CARD';
+  else if (ev.type === 'subst') type = 'SUBSTITUTION';
+  else if (ev.type === 'Var' && String(ev.detail).toLowerCase().includes('cancel')) type = 'VAR_CANCELLED';
+  if (!type) return null;
+  return {
+    id: `ev-${fixtureId}-${index}`,
+    type,
+    minute: ev.time?.elapsed || 0,
+    team: ev.team?.id === homeTeamId ? 'home' : 'away',
+    playerName: ev.player?.name || 'Joueur',
+    assistName: ev.assist?.name || undefined,
+    detail: ev.detail,
+  };
+}
+
 // Transforme un match au format API-Football vers le format de l'app
 export function mapApiFixture(item: any): Match {
   const fixture = item.fixture || {};
@@ -108,15 +127,9 @@ export function mapApiFixture(item: any): Match {
     isLive,
     stadium: fixture.venue?.name,
     referee: fixture.referee || undefined,
-    events: events.map((ev: any, index: number) => ({
-      id: `ev-${fixture.id}-${index}`,
-      type: ev.type === 'Goal' ? 'GOAL' : ev.detail?.includes('Red Card') ? 'RED_CARD' : 'YELLOW_CARD',
-      minute: ev.time?.elapsed || 0,
-      team: ev.team?.id === teams.home?.id ? 'home' : 'away',
-      playerName: ev.player?.name || 'Joueur',
-      assistName: ev.assist?.name,
-      detail: ev.detail,
-    })),
+    events: events
+      .map((ev: any, index: number) => mapApiEvent(ev, fixture.id, index, teams.home?.id))
+      .filter((e: MatchEvent | null): e is MatchEvent => e !== null),
     stats: {
       possession: [50, 50],
       xG: [1.2, 1.1],

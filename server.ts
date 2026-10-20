@@ -14,9 +14,20 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const IS_PROD = process.env.NODE_ENV === 'production' || process.argv.includes('--prod');
 
 // En local, l'API utilise exactement le même code que le Worker Cloudflare (worker/index.ts)
+app.use('/api', express.text({ type: () => true, limit: '200kb' }));
+
 app.all('/api/*', async (req, res) => {
   try {
-    const request = new Request(`http://${req.headers.host || 'localhost'}${req.originalUrl}`, { method: req.method });
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(req.headers)) {
+      if (typeof value === 'string') headers.set(name, value);
+    }
+    const hasBody = req.method !== 'GET' && req.method !== 'HEAD' && typeof req.body === 'string' && req.body.length > 0;
+    const request = new Request(`http://${req.headers.host || 'localhost'}${req.originalUrl}`, {
+      method: req.method,
+      headers,
+      body: hasBody ? req.body : undefined,
+    });
     const response = await worker.fetch(request, process.env as never, {
       waitUntil: (p: Promise<unknown>) => {
         p.catch(() => {});

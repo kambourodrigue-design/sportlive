@@ -49,35 +49,67 @@
   }
 }
 
-/* ---------- Fond ambiant (grille + lueurs) ---------- */
+/* ---------- Fond : aurore animée + lignes de terrain ---------- */
+@property --fs-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
 .fs-bg {
   position: relative;
   isolation: isolate;
-  background-color: #eef2fc;
+  background-color: #eaf0fd;
 }
-.dark .fs-bg { background-color: #070b1b; }
+.dark .fs-bg { background-color: #060919; }
 
+/* Aurore : se déplace très lentement (transform seulement, donc très léger pour le téléphone) */
 .fs-bg::before {
+  content: '';
+  position: fixed;
+  inset: -25%;
+  z-index: -1;
+  pointer-events: none;
+  will-change: transform;
+  background-image:
+    radial-gradient(38% 32% at 22% 24%, rgba(124, 92, 255, 0.22), transparent 70%),
+    radial-gradient(34% 28% at 80% 18%, rgba(34, 211, 238, 0.20), transparent 70%),
+    radial-gradient(40% 34% at 62% 86%, rgba(255, 61, 172, 0.10), transparent 70%);
+  animation: fs-drift 40s ease-in-out infinite alternate;
+}
+.dark .fs-bg::before {
+  background-image:
+    radial-gradient(38% 32% at 22% 24%, rgba(124, 92, 255, 0.42), transparent 70%),
+    radial-gradient(34% 28% at 80% 18%, rgba(34, 211, 238, 0.30), transparent 70%),
+    radial-gradient(40% 34% at 62% 86%, rgba(255, 61, 172, 0.20), transparent 70%);
+}
+@keyframes fs-drift {
+  from { transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1); }
+  to { transform: translate3d(3%, 3%, 0) rotate(7deg) scale(1.08); }
+}
+
+/* Lignes de terrain (rond central, médiane, surfaces) + grille discrète */
+.fs-bg::after {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
   background-image:
-    radial-gradient(60rem 28rem at 12% -8%, rgba(99, 102, 241, 0.16), transparent 60%),
-    radial-gradient(48rem 24rem at 100% 0%, rgba(34, 211, 238, 0.13), transparent 60%),
-    linear-gradient(rgba(95, 108, 150, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(95, 108, 150, 0.07) 1px, transparent 1px);
-  background-size: auto, auto, 44px 44px, 44px 44px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800' viewBox='0 0 800 800' fill='none' stroke='%235f6c96' stroke-opacity='.16' stroke-width='2'%3E%3Ccircle cx='400' cy='400' r='150'/%3E%3Ccircle cx='400' cy='400' r='5' fill='%235f6c96' fill-opacity='.25'/%3E%3Cline x1='0' y1='400' x2='800' y2='400'/%3E%3Crect x='250' y='-2' width='300' height='140'/%3E%3Crect x='250' y='662' width='300' height='140'/%3E%3C/svg%3E"),
+    linear-gradient(rgba(95, 108, 150, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(95, 108, 150, 0.05) 1px, transparent 1px);
+  background-size: min(900px, 150vw), 44px 44px, 44px 44px;
+  background-position: center 8vh, 0 0, 0 0;
+  background-repeat: no-repeat, repeat, repeat;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 60%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 60%, transparent 100%);
 }
-.dark .fs-bg::before {
+.dark .fs-bg::after {
   background-image:
-    radial-gradient(60rem 28rem at 12% -8%, rgba(124, 92, 255, 0.28), transparent 60%),
-    radial-gradient(48rem 24rem at 100% 0%, rgba(34, 211, 238, 0.20), transparent 60%),
-    linear-gradient(rgba(140, 160, 255, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(140, 160, 255, 0.07) 1px, transparent 1px);
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800' viewBox='0 0 800 800' fill='none' stroke='%238fa2ff' stroke-opacity='.20' stroke-width='2'%3E%3Ccircle cx='400' cy='400' r='150'/%3E%3Ccircle cx='400' cy='400' r='5' fill='%238fa2ff' fill-opacity='.30'/%3E%3Cline x1='0' y1='400' x2='800' y2='400'/%3E%3Crect x='250' y='-2' width='300' height='140'/%3E%3Crect x='250' y='662' width='300' height='140'/%3E%3C/svg%3E"),
+    linear-gradient(rgba(140, 160, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(140, 160, 255, 0.045) 1px, transparent 1px);
 }
 
 /* ---------- Surfaces en verre ---------- */
@@ -88,7 +120,7 @@
   border-color: rgba(95, 108, 150, 0.18) !important;
 }
 .dark .fs-bar {
-  background: rgba(8, 12, 30, 0.70);
+  background: rgba(7, 11, 28, 0.72);
   border-color: rgba(140, 160, 255, 0.12) !important;
 }
 .fs-bar::after {
@@ -101,29 +133,79 @@
   background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.65), rgba(139, 92, 246, 0.65), transparent);
 }
 .fs-bar-top::after { bottom: -1px; }
-.fs-bar-bottom::after { top: -1px; }
 
 .fs-surface {
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.66);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
 }
-.dark .fs-surface { background: rgba(10, 15, 36, 0.55); }
+.dark .fs-surface { background: rgba(9, 14, 34, 0.5); }
 
+/* Carte : verre + bordure dégradée fine (violet -> cyan) */
 .fs-card {
-  background: rgba(255, 255, 255, 0.82);
+  position: relative;
+  background: rgba(255, 255, 255, 0.80);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
-  border-color: rgba(95, 108, 150, 0.2) !important;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 8px 28px -14px rgba(40, 55, 120, 0.35);
+  border-color: transparent !important;
+  box-shadow: 0 10px 30px -16px rgba(40, 55, 120, 0.38);
 }
 .dark .fs-card {
-  background: rgba(13, 19, 44, 0.62);
-  border-color: rgba(140, 160, 255, 0.14) !important;
-  box-shadow: 0 1px 0 rgba(180, 200, 255, 0.07) inset, 0 12px 36px -16px rgba(0, 0, 0, 0.7);
+  background: rgba(12, 18, 44, 0.60);
+  box-shadow: 0 14px 40px -18px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(180, 200, 255, 0.06);
+}
+.fs-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  z-index: 2;
+  background: linear-gradient(140deg, rgba(139, 123, 255, 0.55), rgba(34, 211, 238, 0.35) 42%, rgba(255, 255, 255, 0) 72%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask-composite: exclude;
 }
 
-/* ---------- Match en direct : trait néon à gauche ---------- */
+/* Championnat avec du direct : bordure rouge néon -> cyan ; les 3 premiers tournent doucement */
+.fs-card-live::before {
+  background: linear-gradient(140deg, rgba(255, 45, 85, 0.85), rgba(34, 211, 238, 0.55) 55%, rgba(255, 255, 255, 0) 90%);
+}
+.fs-card-live { box-shadow: 0 0 28px -10px rgba(255, 45, 85, 0.45), 0 14px 40px -18px rgba(0, 0, 0, 0.6); }
+@media (prefers-reduced-motion: no-preference) {
+  .fs-card-spin::before {
+    background: conic-gradient(from var(--fs-angle), rgba(255, 45, 85, 0) 0%, rgba(255, 45, 85, 0.95) 12%, rgba(34, 211, 238, 0.85) 24%, rgba(255, 45, 85, 0) 38%, rgba(124, 92, 255, 0.35) 70%, rgba(255, 45, 85, 0) 100%);
+    animation: fs-spin 6s linear infinite;
+  }
+}
+@keyframes fs-spin { to { --fs-angle: 360deg; } }
+
+/* ---------- Menu du bas : dock flottant ---------- */
+.fs-dock {
+  position: relative;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: 0 14px 40px -12px rgba(30, 40, 100, 0.45), 0 0 0 1px rgba(95, 108, 150, 0.16);
+}
+.dark .fs-dock {
+  background: rgba(9, 14, 34, 0.78);
+  box-shadow: 0 16px 44px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(140, 160, 255, 0.16), inset 0 1px 0 rgba(180, 200, 255, 0.08);
+}
+.fs-dock-active::before {
+  content: '';
+  position: absolute;
+  inset: 6px 3px;
+  z-index: -1;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.24), rgba(34, 211, 238, 0.20));
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.32), inset 0 0 0 1px rgba(34, 211, 238, 0.38);
+}
+
+/* ---------- Match en direct : trait néon + score lumineux ---------- */
 .fs-live-row::before {
   content: '';
   position: absolute;
@@ -133,8 +215,11 @@
   width: 3px;
   background: linear-gradient(to bottom, #ff2d55, #ff6b87);
   box-shadow: 0 0 14px 1px rgba(255, 45, 85, 0.65);
+  animation: fs-bar-pulse 2.2s ease-in-out infinite;
 }
-.fs-live-row { background-image: linear-gradient(90deg, rgba(255, 45, 85, 0.07), transparent 38%); }
+.fs-live-row { background-image: linear-gradient(90deg, rgba(255, 45, 85, 0.08), transparent 40%); }
+.dark .fs-live-row .tabular-nums { text-shadow: 0 0 14px rgba(255, 90, 120, 0.45); }
+@keyframes fs-bar-pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
 
 /* ---------- Logo ---------- */
 .fs-logo {

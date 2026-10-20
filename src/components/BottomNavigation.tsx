@@ -30,7 +30,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
     },
     {
       id: 'direct' as MainNavTab,
-      label: 'DIRECT',
+      label: 'Direct',
       icon: Radio,
       badge: liveMatchesCount > 0 ? liveMatchesCount : null,
       isLiveBeacon: true,
@@ -56,8 +56,8 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 fs-bar fs-bar-bottom border-t transition-colors">
-      <div className="max-w-lg mx-auto grid grid-cols-5 h-16 items-center px-1">
+    <nav className="fixed bottom-0 inset-x-0 z-40 px-3 pb-3 pointer-events-none" aria-label="Navigation principale">
+      <div className="pointer-events-auto max-w-md mx-auto fs-dock grid grid-cols-5 h-[62px] items-stretch px-1">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -66,10 +66,11 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`relative flex flex-col items-center justify-center h-full transition-colors select-none ${
+              aria-current={isActive ? 'page' : undefined}
+              className={`relative isolate flex flex-col items-center justify-center gap-1 select-none transition-colors ${
                 isActive
-                  ? 'text-cyan-600 dark:text-cyan-300 font-extrabold'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium'
+                  ? 'fs-dock-active text-cyan-700 dark:text-cyan-200 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-semibold'
               }`}
             >
               <div className="relative">
@@ -79,9 +80,9 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
                   } ${tab.id === 'favoris' && isActive ? 'fill-current' : ''}`}
                 />
 
-                {/* Badge count or pulsing beacon */}
+                {/* Pastille de comptage ou balise « direct » */}
                 {tab.badge !== null && (
-                  <span className="absolute -top-1.5 -right-3 px-1.2 py-0.2 min-w-4 rounded-full bg-red-600 text-white text-[9px] font-black text-center tabular-nums shadow-xs">
+                  <span className="absolute -top-2 -right-3.5 px-1 min-w-4 rounded-full bg-red-500 text-white text-[9px] font-black text-center tabular-nums leading-4 shadow-[0_0_10px_rgba(255,45,85,0.7)]">
                     {tab.badge}
                   </span>
                 )}
@@ -90,14 +91,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
                 )}
               </div>
 
-              <span className="text-[10px] tracking-tight mt-1 truncate max-w-full uppercase">
-                {tab.label}
-              </span>
-
-              {/* Active bar dot */}
-              {isActive && (
-                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-red-600 dark:bg-red-500 rounded-b-full" />
-              )}
+              <span className="text-[9.5px] leading-none tracking-tight whitespace-nowrap">{tab.label}</span>
             </button>
           );
         })}

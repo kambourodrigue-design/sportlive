@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   X, 
   Star, 
@@ -14,7 +14,8 @@ import {
   MapPin,
   Check
 } from 'lucide-react';
-import { Match, MatchEvent } from '../types';
+import { Match, MatchEvent, MatchLineup } from '../types';
+import { useMatchDetail } from '../hooks/useMatchDetail';
 
 interface MatchDetailModalProps {
   match: Match | null;
@@ -34,7 +35,34 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
   const [activeTab, setActiveTab] = useState<'tracker' | 'summary' | 'stats' | 'lineups' | 'h2h'>('tracker');
   const [matchAlertsActive, setMatchAlertsActive] = useState<boolean>(true);
 
+  // Vrai match (API) : on charge ses vraies stats / compositions ; match de démonstration : données simulées
+  const isReal = !!match && match.id.startsWith('apif-');
+  const detail = useMatchDetail(isReal && match ? match.id : null, isReal && match?.isLive ? 60000 : null);
+
+  useEffect(() => {
+    if (isReal) setActiveTab('summary'); // le « terrain 2D » est une simulation : pas pour les vrais matchs
+  }, [match?.id, isReal]);
+
   if (!match) return null;
+
+  const emptyLineup: MatchLineup = { formation: '', coach: '', startingXI: [], substitutes: [] };
+  const homeLineup = (isReal ? detail.data?.homeLineup : match.homeLineup) ?? emptyLineup;
+  const awayLineup = (isReal ? detail.data?.awayLineup : match.awayLineup) ?? emptyLineup;
+  const lineupsMissing = isReal && (!detail.data?.homeLineup || !detail.data?.awayLineup);
+  const events = isReal && detail.data && detail.data.events.length > 0 ? detail.data.events : match.events;
+  const statRows = isReal
+    ? detail.data?.stats ?? []
+    : [
+        { label: 'Possession', val: match.stats.possession, unit: '%' },
+        { label: 'Expected Goals (xG)', val: match.stats.xG, unit: '' },
+        { label: 'Tirs cadrés', val: match.stats.shotsOnTarget, unit: '' },
+        { label: 'Total des tirs', val: match.stats.totalShots, unit: '' },
+        { label: 'Corners', val: match.stats.corners, unit: '' },
+        { label: 'Fautes', val: match.stats.fouls, unit: '' },
+        { label: 'Hors-jeux', val: match.stats.offsides, unit: '' },
+        { label: 'Cartons jaunes', val: match.stats.yellowCards, unit: '' },
+        { label: 'Arrêts du gardien', val: match.stats.saves, unit: '' },
+      ];
 
   const renderEventIcon = (event: MatchEvent) => {
     switch (event.type) {
@@ -172,7 +200,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
           </div>
 
           {/* Quick simulator goal test */}
-          {match.isLive && (
+          {match.isLive && !isReal && (
             <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-center gap-2">
               <button
                 onClick={() => onSimulateGoal(match.id)}
@@ -187,6 +215,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
 
         {/* Tab Navigation */}
         <div className="flex items-center overflow-x-auto border-b border-slate-200 dark:border-slate-800 px-4 bg-white dark:bg-slate-900 scrollbar-none">
+          {!isReal && (
           <button
             onClick={() => setActiveTab('tracker')}
             className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition-colors whitespace-nowrap ${
@@ -198,6 +227,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             <Activity className="w-3.5 h-3.5" />
             <span>Terrain 2D</span>
           </button>
+          )}
           <button
             onClick={() => setActiveTab('summary')}
             className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition-colors whitespace-nowrap ${
@@ -207,7 +237,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
-            <span>Résumé ({match.events.length})</span>
+            <span>Résumé ({events.length})</span>
           </button>
           <button
             onClick={() => setActiveTab('stats')}
@@ -318,11 +348,11 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
           {/* TAB 2: TIMELINE SUMMARY */}
           {activeTab === 'summary' && (
             <div className="space-y-3">
-              {match.events.length === 0 ? (
+              {events.length === 0 ? (
                 <p className="text-center text-xs text-slate-400 py-8">Aucun événement majeur pour l’instant.</p>
               ) : (
                 <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-800">
-                  {match.events.map((event) => (
+                  {events.map((event) => (
                     <div key={event.id} className="relative flex items-start gap-3">
                       {/* Timeline dot */}
                       <div className="absolute -left-6 top-1 w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 flex items-center justify-center shrink-0">
@@ -359,17 +389,12 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
           {/* TAB 3: LIVE STATS COMPARISON */}
           {activeTab === 'stats' && (
             <div className="space-y-3">
-              {[
-                { label: 'Possession', val: match.stats.possession, unit: '%' },
-                { label: 'Expected Goals (xG)', val: match.stats.xG, unit: '' },
-                { label: 'Tirs cadrés', val: match.stats.shotsOnTarget, unit: '' },
-                { label: 'Total des tirs', val: match.stats.totalShots, unit: '' },
-                { label: 'Corners', val: match.stats.corners, unit: '' },
-                { label: 'Fautes', val: match.stats.fouls, unit: '' },
-                { label: 'Hors-jeux', val: match.stats.offsides, unit: '' },
-                { label: 'Cartons jaunes', val: match.stats.yellowCards, unit: '' },
-                { label: 'Arrêts du gardien', val: match.stats.saves, unit: '' },
-              ].map((stat, i) => {
+              {isReal && statRows.length === 0 && (
+                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-6">
+                  {detail.loading ? 'Chargement des statistiques...' : 'Statistiques non disponibles pour ce match.'}
+                </p>
+              )}
+              {statRows.map((stat, i) => {
                 const home = stat.val[0];
                 const away = stat.val[1];
                 const total = (home + away) || 1;
@@ -405,7 +430,13 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
           )}
 
           {/* TAB 4: LINEUPS */}
-          {activeTab === 'lineups' && (
+          {activeTab === 'lineups' && lineupsMissing && (
+            <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-6">
+              {detail.loading ? 'Chargement des compositions...' : "Compositions pas encore disponibles (elles sortent environ 1 h avant le coup d'envoi)."}
+            </p>
+          )}
+
+          {activeTab === 'lineups' && !lineupsMissing && (
             <div className="space-y-5">
               <div className="grid grid-cols-2 gap-4">
                 
@@ -416,12 +447,12 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                       {match.homeTeam.name}
                     </span>
                     <span className="text-[11px] font-mono text-red-600 font-bold">
-                      {match.homeLineup.formation}
+                      {homeLineup.formation}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mb-2">Coach : {match.homeLineup.coach}</p>
+                  <p className="text-[11px] text-slate-400 mb-2">Coach : {homeLineup.coach}</p>
                   <div className="space-y-1.5">
-                    {match.homeLineup.startingXI.map((player) => (
+                    {homeLineup.startingXI.map((player) => (
                       <div key={player.id} className="flex items-center justify-between text-xs py-1 px-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800/50">
                         <div className="flex items-center gap-2 truncate">
                           <span className="text-[10px] font-mono font-bold text-slate-400 w-4 text-right">
@@ -431,9 +462,9 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                             {player.name}
                           </span>
                         </div>
-                        <span className="text-[11px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 tabular-nums">
+                        {player.rating > 0 && (<span className="text-[11px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 tabular-nums">
                           {player.rating}
-                        </span>
+                        </span>)}
                       </div>
                     ))}
                   </div>
@@ -446,12 +477,12 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                       {match.awayTeam.name}
                     </span>
                     <span className="text-[11px] font-mono text-slate-500 font-bold">
-                      {match.awayLineup.formation}
+                      {awayLineup.formation}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mb-2">Coach : {match.awayLineup.coach}</p>
+                  <p className="text-[11px] text-slate-400 mb-2">Coach : {awayLineup.coach}</p>
                   <div className="space-y-1.5">
-                    {match.awayLineup.startingXI.map((player) => (
+                    {awayLineup.startingXI.map((player) => (
                       <div key={player.id} className="flex items-center justify-between text-xs py-1 px-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800/50">
                         <div className="flex items-center gap-2 truncate">
                           <span className="text-[10px] font-mono font-bold text-slate-400 w-4 text-right">
@@ -461,9 +492,9 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                             {player.name}
                           </span>
                         </div>
-                        <span className="text-[11px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 tabular-nums">
+                        {player.rating > 0 && (<span className="text-[11px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 tabular-nums">
                           {player.rating}
-                        </span>
+                        </span>)}
                       </div>
                     ))}
                   </div>

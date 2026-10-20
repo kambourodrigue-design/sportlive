@@ -192,7 +192,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 pb-20 md:pb-24">
+      <main className="flex-1 pb-28 md:pb-28">
         
         {/* TAB: TOUS LES MATCHS */}
         {activeTab === 'tous' && (

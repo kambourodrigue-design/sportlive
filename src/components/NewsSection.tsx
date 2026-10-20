@@ -21,7 +21,7 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
   const [activeCategory, setActiveCategory] = useState<string>('TOUS');
   const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
 
-  const categories = ['TOUS', 'FOOTBALL', 'MERCATO', 'EUROPE', 'ÉQUIPE DE FRANCE'];
+  const categories = ['TOUS', 'FOOTBALL', 'MERCATO', 'EUROPE', 'BASKET', 'RUGBY', 'TENNIS', 'HANDBALL', 'HOCKEY', 'ÉQUIPE DE FRANCE'];
 
   const filteredNews = news.filter((item) => {
     if (activeCategory === 'TOUS') return true;
@@ -50,7 +50,7 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
             onClick={() => setActiveCategory(cat)}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
               activeCategory === cat
-                ? 'bg-red-600 text-white shadow-xs'
+                ? 'fs-logo text-white'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >

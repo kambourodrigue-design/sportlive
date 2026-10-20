@@ -87,13 +87,15 @@ export const MatchList: React.FC<MatchListProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3 space-y-3">
-      {groupedLeagues.map(({ league, matches: leagueMatches, liveCount }) => {
+      {groupedLeagues.map(({ league, matches: leagueMatches, liveCount }, leagueIndex) => {
         const isCollapsed = collapsedLeagues[league.id];
 
         return (
           <div
             key={league.id}
-            className="rounded-2xl overflow-hidden fs-card border transition-colors"
+            className={`rounded-2xl overflow-hidden fs-card border transition-colors ${
+              liveCount > 0 ? `fs-card-live ${leagueIndex < 3 ? 'fs-card-spin' : ''}` : ''
+            }`}
           >
             {/* League Header (Matching Screenshot 3 & 4) */}
             <div
