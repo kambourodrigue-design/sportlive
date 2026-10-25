@@ -9,6 +9,8 @@ interface DateStripProps {
   totalMatchesCount: number;
   activeFilter: 'all' | 'live' | 'finished';
   onChangeFilter: (filter: 'all' | 'live' | 'finished') => void;
+  africaOnly?: boolean;
+  onToggleAfrica?: () => void;
 }
 
 export const DateStrip: React.FC<DateStripProps> = ({
@@ -18,6 +20,8 @@ export const DateStrip: React.FC<DateStripProps> = ({
   totalMatchesCount,
   activeFilter,
   onChangeFilter,
+  africaOnly = false,
+  onToggleAfrica,
 }) => {
   const days = getWeekStrip();
 
@@ -109,6 +113,20 @@ export const DateStrip: React.FC<DateStripProps> = ({
           >
             Terminés
           </button>
+          {onToggleAfrica && (
+            <button
+              onClick={onToggleAfrica}
+              aria-pressed={africaOnly}
+              className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
+                africaOnly
+                  ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <span aria-hidden="true">🌍</span>
+              <span>Afrique</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

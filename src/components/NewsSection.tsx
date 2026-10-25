@@ -21,7 +21,7 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
   const [activeCategory, setActiveCategory] = useState<string>('TOUS');
   const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
 
-  const categories = ['TOUS', 'FOOTBALL', 'MERCATO', 'EUROPE', 'BASKET', 'RUGBY', 'TENNIS', 'HANDBALL', 'HOCKEY', 'ÉQUIPE DE FRANCE'];
+  const categories = ['TOUS', 'FOOTBALL', 'MERCATO', 'EUROPE', 'AFRIQUE', 'BASKET', 'TENNIS', 'AUTRE'];
 
   const filteredNews = news.filter((item) => {
     if (activeCategory === 'TOUS') return true;

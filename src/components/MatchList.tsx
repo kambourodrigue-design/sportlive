@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Star, Trophy } from 'lucide-react';
 import { League, Match } from '../types';
 import { MatchRow } from './MatchRow';
+import { Link, leagueUrl } from '../router';
 
 interface MatchListProps {
   leagues: League[];
@@ -13,6 +14,7 @@ interface MatchListProps {
   onOpenLeagueStandings?: (leagueId: string) => void;
   activeFilter: 'all' | 'live' | 'finished';
   onlyFavorites?: boolean;
+  comingSoon?: boolean; // sport sans données pour l'instant (tennis)
 }
 
 export const MatchList: React.FC<MatchListProps> = ({
@@ -25,7 +27,20 @@ export const MatchList: React.FC<MatchListProps> = ({
   onOpenLeagueStandings,
   activeFilter,
   onlyFavorites = false,
+  comingSoon = false,
 }) => {
+  if (comingSoon) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-16 text-center">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl fs-logo flex items-center justify-center text-3xl">🎾</div>
+        <h3 className="text-lg font-black text-slate-900 dark:text-white">Le tennis arrive bientôt</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5">
+          Les scores de tennis seront disponibles prochainement sur ScoreAfrica. En attendant, suis le football et le basket.
+        </p>
+      </div>
+    );
+  }
+
   // Collapsed leagues state
   const [collapsedLeagues, setCollapsedLeagues] = useState<Record<string, boolean>>({});
 
@@ -130,9 +145,13 @@ export const MatchList: React.FC<MatchListProps> = ({
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
                     {league.country} :
                   </span>
-                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  <Link
+                    to={leagueUrl(league.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs font-bold text-slate-900 dark:text-white truncate hover:text-accent-600 dark:hover:text-cyan-300"
+                  >
                     {league.name}
-                  </span>
+                  </Link>
                 </div>
 
                 {onOpenLeagueStandings && (

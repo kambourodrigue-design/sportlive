@@ -76,6 +76,7 @@ export function mapApiEvent(ev: any, fixtureId: unknown, index: number, homeTeam
     id: `ev-${fixtureId}-${index}`,
     type,
     minute: ev.time?.elapsed || 0,
+    extra: ev.time?.extra || undefined,
     team: ev.team?.id === homeTeamId ? 'home' : 'away',
     playerName: ev.player?.name || 'Joueur',
     assistName: ev.assist?.name || undefined,

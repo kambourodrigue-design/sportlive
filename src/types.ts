@@ -1,4 +1,4 @@
-export type SportId = 'football' | 'tennis' | 'basketball' | 'rugby' | 'hockey' | 'handball';
+export type SportId = 'football' | 'tennis' | 'basketball';
 
 export interface SportInfo {
   id: SportId;
@@ -22,6 +22,7 @@ export interface MatchEvent {
   id: string;
   type: 'GOAL' | 'YELLOW_CARD' | 'RED_CARD' | 'SUBSTITUTION' | 'VAR_CANCELLED' | 'PENALTY_MISSED';
   minute: number;
+  extra?: number; // temps additionnel (ex. 45+2)
   team: 'home' | 'away';
   playerName: string;
   assistName?: string;

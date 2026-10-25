@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Sparkles, LogOut, Plus, ArrowLeft, Trash2, Eye } from 'lucide-react';
 import { adminRequest, clearAdminToken, getAdminToken, setAdminToken, OwnArticle } from '../services/articles';
 
-const CATEGORIES = ['FOOTBALL', 'MERCATO', 'EUROPE', 'BASKET', 'RUGBY', 'TENNIS', 'HANDBALL', 'HOCKEY', 'AUTRE'];
+const CATEGORIES = ['FOOTBALL', 'MERCATO', 'EUROPE', 'AFRIQUE', 'BASKET', 'TENNIS', 'AUTRE'];
 const TONES = ['Informatif', 'Analyse', 'Brève'];
 const TO_VERIFY = '[À VÉRIFIER';
 
@@ -36,6 +36,18 @@ const AdminPanel: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [tone, setTone] = useState('Informatif');
   const [titleIdeas, setTitleIdeas] = useState<string[]>([]);
+  const [messages, setMessages] = useState<{ id: string; name: string; email: string; message: string; createdAt: string }[]>([]);
+
+  const loadMessages = useCallback(async () => {
+    const r = await adminRequest<{ items: typeof messages }>('/api/admin/messages');
+    if (r.ok) setMessages(r.data.items ?? []);
+  }, []);
+
+  async function deleteMessage(id: string) {
+    if (!window.confirm('Supprimer ce message ?')) return;
+    const r = await adminRequest('/api/admin/messages/delete', 'POST', { id });
+    if (r.ok) setMessages((m) => m.filter((x) => x.id !== id));
+  }
 
   // Thème identique au site, page non indexée
   useEffect(() => {
@@ -69,8 +81,11 @@ const AdminPanel: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (authed) loadArticles();
-  }, [authed, loadArticles]);
+    if (authed) {
+      loadArticles();
+      loadMessages();
+    }
+  }, [authed, loadArticles, loadMessages]);
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
@@ -404,6 +419,31 @@ const AdminPanel: React.FC = () => {
             ))}
           </ul>
         )}
+
+        <section aria-label="Messages de contact" className="pt-4">
+          <h2 className="text-sm font-bold mb-2">Messages de contact ({messages.length})</h2>
+          {messages.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">Aucun message reçu pour le moment.</p>
+          ) : (
+            <ul className="space-y-2.5">
+              {messages.map((m) => (
+                <li key={m.id} className="rounded-2xl fs-card border p-3.5 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold truncate">{m.name}</p>
+                      <a href={`mailto:${m.email}`} className="text-xs text-cyan-700 dark:text-cyan-300 hover:underline break-all">{m.email}</a>
+                    </div>
+                    <span className="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">{new Date(m.createdAt).toLocaleString('fr-FR')}</span>
+                  </div>
+                  <p className="text-sm whitespace-pre-wrap break-words">{m.message}</p>
+                  <button className={`${secondary} inline-flex items-center gap-1 text-fuchsia-600 dark:text-fuchsia-300`} onClick={() => deleteMessage(m.id)}>
+                    <Trash2 className="w-3.5 h-3.5" /> Supprimer
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     </div>
   );

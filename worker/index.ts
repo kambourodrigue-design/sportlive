@@ -1,4 +1,5 @@
 // Worker Cloudflare : sert l'API (/api/*). Les fichiers du site (dist/) sont servis par Cloudflare Assets.
+import { isAfricanLeague } from '../src/utils/africa';
 
 type KV = {
   get(key: string): Promise<string | null>;
@@ -135,7 +136,7 @@ function compactEvents(events: any[] | undefined) {
   return (events || []).map((e: any) => ({
     type: e.type,
     detail: e.detail,
-    time: { elapsed: e.time?.elapsed },
+    time: { elapsed: e.time?.elapsed, extra: e.time?.extra },
     team: { id: e.team?.id },
     player: { name: e.player?.name },
     assist: { name: e.assist?.name },
@@ -169,13 +170,10 @@ function compactDetail(f: any) {
 // Autres sports : même compte et même clé API-Sports, une API (et un quota) par sport
 const SPORT_HOSTS: Record<string, string> = {
   basketball: 'https://v1.basketball.api-sports.io',
-  rugby: 'https://v1.rugby.api-sports.io',
-  hockey: 'https://v1.hockey.api-sports.io',
-  handball: 'https://v1.handball.api-sports.io',
 };
 
 function compactGame(g: any) {
-  // Basket : scores.home = { total, quarter_1... } ; hockey/rugby/handball : scores.home = nombre
+  // Basket : scores.home = { total, quarter_1... } ; autres sports : scores.home = nombre
   const score = (s: any): number | null => (typeof s === 'number' ? s : typeof s?.total === 'number' ? s.total : null);
   return {
     id: g.id,
@@ -405,7 +403,7 @@ function evaluateBet(bet: Bet, home: number, away: number): boolean {
 async function settleHistory(env: Env, h: History): Promise<History> {
   const now = Date.now();
   const due = h.entries.filter((e) => e.result === 'pending' && new Date(e.kickoff).getTime() + 2.5 * 3600e3 < now);
-  if (due.length > 0 && now - h.lastSettle >= 10 * 60e3) {
+  if (due.length > 0 && now - h.lastSettle >= 5 * 60e3) {
     h.lastSettle = now;
     try {
       const ids = due.slice(0, 20).map((e) => e.fixtureId).join('-');
@@ -695,7 +693,7 @@ async function buildPicks(env: Env): Promise<unknown[]> {
 // ---------------------------------------------------------------------------
 // Rédaction maison : articles écrits par toi (page /admin), avec assistant IA
 // ---------------------------------------------------------------------------
-const CATEGORIES = ['FOOTBALL', 'MERCATO', 'EUROPE', 'BASKET', 'RUGBY', 'TENNIS', 'HANDBALL', 'HOCKEY', 'AUTRE'];
+const CATEGORIES = ['FOOTBALL', 'MERCATO', 'EUROPE', 'AFRIQUE', 'BASKET', 'TENNIS', 'AUTRE'];
 const ARTICLES_KEY = 'articles_v1';
 const MAX_ARTICLES = 300;
 const TO_VERIFY = '[À VÉRIFIER';
@@ -895,6 +893,16 @@ async function handleAdmin(request: Request, env: Env, url: URL): Promise<Respon
   const auth = request.headers.get('authorization') || '';
   if (!auth.startsWith('Bearer ') || !(await verifyToken(env, auth.slice(7)))) {
     return json({ success: false, error: 'Session expirée, reconnecte-toi.' }, 401);
+  }
+
+  if (path === '/api/admin/messages' && request.method === 'GET') {
+    return json({ success: true, items: await loadContacts(env) });
+  }
+  if (path === '/api/admin/messages/delete' && request.method === 'POST') {
+    const body = await readJson(request).catch(() => ({}));
+    const list = (await loadContacts(env)).filter((m) => m.id !== body.id);
+    await kvWrite(env, CONTACT_KEY, JSON.stringify(list));
+    return json({ success: true });
   }
 
   if (path === '/api/admin/articles' && request.method === 'GET') {
@@ -1147,6 +1155,162 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
   return json({ success: false, error: 'Not found' }, 404);
 }
 
+// ---------- Championnats africains, ligues, équipes, contact ----------
+const LEAGUE_EXCLUDE_RE =
+  /women|feminin|femini|\bU-?\d{2}\b|youth|junior|reserve|amateur|regional|futsal|beach|diski|\b(2|II)\b|second|division 2|ligue 2|2nd|third|national league|\bcup\b|supercup|super cup|play-?off|promotion|relegation/i;
+const COUNTRY_PRIORITY = [
+  'egypt', 'morocco', 'algeria', 'tunisia', 'south-africa', 'nigeria', 'ghana', 'senegal', 'ivory-coast', 'cameroon',
+  'congo-dr', 'dr-congo', 'burkina-faso', 'mali', 'guinea', 'benin', 'togo', 'kenya', 'tanzania', 'zambia', 'angola',
+];
+
+// Compétitions africaines de la saison en cours : continentales + 1 championnat national par pays (le plus ancien identifiant,
+// c'est-à-dire la première division dans le catalogue d'API-Football). Les identifiants viennent de l'API, rien n'est codé en dur.
+function compactAfricanLeagues(resp: any[]) {
+  const continental: any[] = [];
+  const byCountry = new Map<string, any>();
+  for (const it of resp) {
+    const lg = it.league || {};
+    const c = it.country || {};
+    const name = String(lg.name || '');
+    const country = String(c.name || '');
+    if (!lg.id || !isAfricanLeague(country, name)) continue;
+    const cur = (it.seasons || []).find((x: any) => x.current);
+    if (!cur) continue;
+    const isCont = /^(world|africa)$/i.test(country);
+    if (isCont && /\bU-?\d{2}\b|women|youth|futsal|beach|qualif/i.test(name) && !/CAF Champions|Confederation|Africa Cup of Nations$|Super Cup/i.test(name)) continue;
+    if (!isCont && (lg.type !== 'League' || LEAGUE_EXCLUDE_RE.test(name))) continue;
+    const row = { id: lg.id as number, name, country, code: c.code || null, continental: isCont, season: cur.year as number };
+    if (isCont) continental.push(row);
+    else {
+      const key = country.toLowerCase();
+      const prev = byCountry.get(key);
+      if (!prev || row.id < prev.id) byCountry.set(key, row);
+    }
+  }
+  const rank = (c: string) => {
+    const i = COUNTRY_PRIORITY.indexOf(c.toLowerCase());
+    return i === -1 ? 999 : i;
+  };
+  const national = [...byCountry.values()].sort((a, b) => rank(a.country) - rank(b.country) || a.country.localeCompare(b.country));
+  continental.sort((a, b) => a.name.localeCompare(b.name));
+  return [...continental, ...national];
+}
+
+const rowStats = (o: any) => ({
+  p: o?.played ?? 0,
+  w: o?.win ?? 0,
+  d: o?.draw ?? 0,
+  l: o?.lose ?? 0,
+  gf: o?.goals?.for ?? 0,
+  ga: o?.goals?.against ?? 0,
+});
+
+function compactStandings(resp: any[]) {
+  const lg = resp?.[0]?.league;
+  if (!lg) return { info: null, groups: [] as any[] };
+  const groups = (lg.standings || []).map((rows: any[]) => ({
+    name: rows[0]?.group || '',
+    rows: rows.map((r: any) => ({
+      rank: r.rank,
+      team: { id: r.team?.id, name: r.team?.name },
+      points: r.points ?? 0,
+      diff: r.goalsDiff ?? 0,
+      form: r.form || '',
+      desc: r.description || '',
+      all: rowStats(r.all),
+      home: rowStats(r.home),
+      away: rowStats(r.away),
+    })),
+  }));
+  return { info: { id: lg.id, name: lg.name, country: lg.country, season: lg.season }, groups };
+}
+
+function compactScorers(resp: any[]) {
+  return (resp || []).slice(0, 20).map((x: any) => ({
+    player: { id: x.player?.id, name: x.player?.name },
+    team: { id: x.statistics?.[0]?.team?.id, name: x.statistics?.[0]?.team?.name },
+    goals: x.statistics?.[0]?.goals?.total ?? 0,
+    assists: x.statistics?.[0]?.goals?.assists ?? 0,
+    games: x.statistics?.[0]?.games?.appearences ?? 0,
+  }));
+}
+
+function compactPlayers(resp: any[]) {
+  return (resp || []).map((t: any) => ({
+    teamId: t.team?.id,
+    players: (t.players || [])
+      .map((p: any) => {
+        const st = p.statistics?.[0] || {};
+        const rating = parseFloat(st.games?.rating);
+        return {
+          id: p.player?.id,
+          name: p.player?.name,
+          number: st.games?.number ?? null,
+          pos: st.games?.position ?? '',
+          minutes: st.games?.minutes ?? 0,
+          rating: Number.isFinite(rating) ? rating : null,
+          goals: st.goals?.total ?? 0,
+          assists: st.goals?.assists ?? 0,
+          saves: st.goals?.saves ?? 0,
+          shots: st.shots?.total ?? 0,
+          shotsOn: st.shots?.on ?? 0,
+          keyPasses: st.passes?.key ?? 0,
+          yellow: st.cards?.yellow ?? 0,
+          red: st.cards?.red ?? 0,
+        };
+      })
+      .filter((p: any) => p.minutes > 0),
+  }));
+}
+
+function isoDayInTz(tz: string, offsetDays: number): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(Date.now() + offsetDays * 86400e3));
+}
+
+const apiId = (v: string | null): number | null => {
+  const n = parseInt(v || '', 10);
+  return Number.isInteger(n) && n > 0 && n < 10_000_000 ? n : null;
+};
+
+// Messages du formulaire de contact (lus depuis /admin)
+interface ContactMsg {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  createdAt: string;
+}
+const CONTACT_KEY = 'contact_messages_v1';
+
+async function loadContacts(env: Env): Promise<ContactMsg[]> {
+  try {
+    const raw = await kvRead(env, CONTACT_KEY);
+    return raw ? (JSON.parse(raw) as ContactMsg[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function handleContact(request: Request, env: Env): Promise<Response> {
+  if (request.method !== 'POST') return json({ success: false, error: 'Méthode non autorisée' }, 405);
+  const body = await readJson(request).catch(() => ({}));
+  const name = cleanText(body.name, 80);
+  const email = cleanText(body.email, 254).toLowerCase();
+  const message = cleanText(body.message, 2000);
+  if (!name || !EMAIL_RE.test(email) || message.length < 10) {
+    return json({ success: false, error: 'Merci de renseigner ton nom, une adresse e-mail valide et un message (10 caractères minimum).' }, 400);
+  }
+  const ip = request.headers.get('cf-connecting-ip') || 'local';
+  const rlKey = `contact_ip_${await sha256Hex(ip)}`;
+  const count = Number((await cacheGet(env, rlKey, 3600)) ?? 0);
+  if (count >= 5) return json({ success: false, error: 'Trop de messages envoyés. Réessaie dans une heure.' }, 429);
+  const list = await loadContacts(env);
+  list.unshift({ id: b64url(crypto.getRandomValues(new Uint8Array(9))), name, email, message, createdAt: new Date().toISOString() });
+  await kvWrite(env, CONTACT_KEY, JSON.stringify(list.slice(0, 200)));
+  await cacheSet(env, rlKey, count + 1, 3600);
+  return json({ success: true });
+}
+
 export default {
   async scheduled(event: { cron: string }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
     ctx.waitUntil(runCron(env, event.cron));
@@ -1233,25 +1397,43 @@ export default {
         const count = (r: HistoryEntry['result']) => h.entries.filter((e) => e.result === r).length;
         const won = count('won');
         const lost = count('lost');
+        const pct = (w: number, l: number) => (w + l > 0 ? Math.round((w / (w + l)) * 100) : null);
+        const settled = h.entries.filter((e) => e.result === 'won' || e.result === 'lost'); // déjà triés du plus récent au plus ancien
+        const period = (days: number) => {
+          const since = Date.now() - days * 86400e3;
+          const mine = settled.filter((e) => new Date(e.kickoff).getTime() >= since);
+          const w = mine.filter((e) => e.result === 'won').length;
+          return { won: w, lost: mine.length - w, rate: pct(w, mine.length - w) };
+        };
+        let streak = 0;
+        for (const e of settled) {
+          if (e.result !== settled[0].result) break;
+          streak++;
+        }
         return json({
           success: true,
+          updatedAt: new Date().toISOString(),
           stats: {
             total: h.entries.length,
             won,
             lost,
             pending: count('pending'),
             void: count('void'),
-            rate: won + lost > 0 ? Math.round((won / (won + lost)) * 100) : null,
+            rate: pct(won, lost),
+            last7: period(7),
+            last30: period(30),
+            streak: settled.length ? { type: settled[0].result, count: streak } : null,
+            form: settled.slice(0, 10).map((e) => e.result), // 10 derniers résultats, du plus récent au plus ancien
             byModel: (['claude', 'deepseek'] as const)
               .map((m) => {
                 const mine = h.entries.filter((e) => e.model === m);
                 const w = mine.filter((e) => e.result === 'won').length;
                 const l = mine.filter((e) => e.result === 'lost').length;
-                return { model: m, won: w, lost: l, rate: w + l > 0 ? Math.round((w / (w + l)) * 100) : null };
+                return { model: m, won: w, lost: l, rate: pct(w, l) };
               })
               .filter((x) => x.won + x.lost > 0),
           },
-          entries: h.entries.slice(0, 30),
+          entries: h.entries.slice(0, 50),
         });
       }
 
@@ -1295,6 +1477,146 @@ export default {
         if (errors && response.length === 0) return json({ success: true, fromRealApi: true, data: [], apiError: errors });
         const compact = response.map(compactFixture);
         await cacheSet(env, key, compact, ttl);
+        return json({ success: true, fromRealApi: true, cached: false, data: compact });
+      }
+
+      if (url.pathname === '/api/contact') return await handleContact(request, env);
+
+      if (url.pathname === '/api/leagues/africa') {
+        if (!configured) return json({ success: true, fromRealApi: false, data: [] });
+        const hit = await cacheGet(env, 'leagues_africa_v1', 86400);
+        if (hit) return json({ success: true, fromRealApi: true, cached: true, data: hit });
+        const { response, errors } = await callApiRaw(env, '/leagues?current=true');
+        if (errors && response.length === 0) return json({ success: true, fromRealApi: true, data: [], apiError: errors });
+        const compact = compactAfricanLeagues(response);
+        if (compact.length) await cacheSet(env, 'leagues_africa_v1', compact, 86400);
+        return json({ success: true, fromRealApi: true, cached: false, data: compact });
+      }
+
+      if (url.pathname === '/api/league') {
+        if (!configured) return json({ success: true, fromRealApi: false });
+        const id = apiId(url.searchParams.get('id'));
+        if (!id) return json({ success: false, error: 'Identifiant de championnat invalide' }, 400);
+        const q = url.searchParams.get('season') || '';
+        const season = /^\d{4}$/.test(q) ? q : currentSeason();
+        const key = `league_v2_${id}_${season}`;
+        const hit = await cacheGet(env, key, 3600);
+        if (hit) return json({ success: true, fromRealApi: true, cached: true, ...(hit as object) });
+        const [st, sc] = await Promise.allSettled([
+          callApiRaw(env, `/standings?league=${id}&season=${season}`),
+          callApiRaw(env, `/players/topscorers?league=${id}&season=${season}`),
+        ]);
+        const stRes = st.status === 'fulfilled' ? st.value : null;
+        const scRes = sc.status === 'fulfilled' ? sc.value : null;
+        const standings = compactStandings(stRes?.response || []);
+        const scorers = compactScorers(scRes?.response || []);
+        const apiError = (stRes?.errors || (st.status === 'rejected' ? 'Erreur API' : null)) as string | null;
+        if (standings.groups.length === 0 && scorers.length === 0) {
+          return json({ success: true, fromRealApi: true, season, info: null, groups: [], scorers: [], apiError: apiError || null });
+        }
+        const payload = { season, info: standings.info, groups: standings.groups, scorers };
+        await cacheSet(env, key, payload, 3600);
+        return json({ success: true, fromRealApi: true, cached: false, ...payload });
+      }
+
+      if (url.pathname === '/api/league/fixtures') {
+        if (!configured) return json({ success: true, fromRealApi: false, data: [] });
+        const id = apiId(url.searchParams.get('id'));
+        if (!id) return json({ success: false, error: 'Identifiant de championnat invalide' }, 400);
+        const q = url.searchParams.get('season') || '';
+        const season = /^\d{4}$/.test(q) ? q : currentSeason();
+        const tz = safeTimeZone(url.searchParams.get('tz'));
+        const key = `lfx_v1_${id}_${season}_${tz}`;
+        const hit = await cacheGet(env, key, 600);
+        if (hit) return json({ success: true, fromRealApi: true, cached: true, data: hit });
+        const from = isoDayInTz(tz, -7);
+        const to = isoDayInTz(tz, 7);
+        const { response, errors } = await callApiRaw(
+          env,
+          `/fixtures?league=${id}&season=${season}&from=${from}&to=${to}&timezone=${encodeURIComponent(tz)}`,
+        );
+        if (errors && response.length === 0) return json({ success: true, fromRealApi: true, data: [], apiError: errors });
+        const compact = response.map(compactFixture);
+        await cacheSet(env, key, compact, 600);
+        return json({ success: true, fromRealApi: true, cached: false, data: compact });
+      }
+
+      if (url.pathname === '/api/team') {
+        if (!configured) return json({ success: true, fromRealApi: false });
+        const id = apiId(url.searchParams.get('id'));
+        if (!id) return json({ success: false, error: 'Identifiant d\'équipe invalide' }, 400);
+        const tz = safeTimeZone(url.searchParams.get('tz'));
+        const key = `team_v1_${id}_${tz}`;
+        const hit = await cacheGet(env, key, 600);
+        if (hit) return json({ success: true, fromRealApi: true, cached: true, ...(hit as object) });
+        const tzq = encodeURIComponent(tz);
+        const [last, next, info] = await Promise.allSettled([
+          callApiRaw(env, `/fixtures?team=${id}&last=10&timezone=${tzq}`),
+          callApiRaw(env, `/fixtures?team=${id}&next=10&timezone=${tzq}`),
+          cachedApi(env, `teaminfo_v1_${id}`, `/teams?id=${id}`, 86400, (t: any) => ({
+            id: t.team?.id,
+            name: t.team?.name,
+            country: t.team?.country,
+            founded: t.team?.founded,
+            venue: { name: t.venue?.name, city: t.venue?.city, capacity: t.venue?.capacity },
+          })),
+        ]);
+        const lastRes = last.status === 'fulfilled' ? last.value : null;
+        const nextRes = next.status === 'fulfilled' ? next.value : null;
+        const infoRes = info.status === 'fulfilled' ? (info.value.data as any[])[0] ?? null : null;
+        const payload = {
+          info: infoRes,
+          last: (lastRes?.response || []).map(compactFixture),
+          next: (nextRes?.response || []).map(compactFixture),
+        };
+        if (payload.last.length === 0 && payload.next.length === 0 && !infoRes) {
+          return json({ success: true, fromRealApi: true, ...payload, apiError: lastRes?.errors || nextRes?.errors || 'Aucune donnée pour cette équipe.' });
+        }
+        await cacheSet(env, key, payload, 600);
+        return json({ success: true, fromRealApi: true, cached: false, ...payload });
+      }
+
+      if (url.pathname === '/api/fixture/players') {
+        if (!configured) return json({ success: true, fromRealApi: false, teams: [] });
+        const id = apiId(url.searchParams.get('id'));
+        if (!id) return json({ success: false, error: 'Identifiant de match invalide' }, 400);
+        const key = `fixture_players_v1_${id}`;
+        const hit = await cacheGet(env, key, liveTtl);
+        if (hit) return json({ success: true, fromRealApi: true, cached: true, teams: hit });
+        const { response, errors } = await callApiRaw(env, `/fixtures/players?fixture=${id}`);
+        if (errors && response.length === 0) return json({ success: true, fromRealApi: true, teams: [], apiError: errors });
+        const teams = compactPlayers(response);
+        await cacheSet(env, key, teams, liveTtl);
+        return json({ success: true, fromRealApi: true, cached: false, teams });
+      }
+
+      if (url.pathname === '/api/h2h') {
+        if (!configured) return json({ success: true, fromRealApi: false, data: [] });
+        const a = apiId(url.searchParams.get('a'));
+        const b = apiId(url.searchParams.get('b'));
+        if (!a || !b) return json({ success: false, error: 'Équipes invalides' }, 400);
+        const tz = safeTimeZone(url.searchParams.get('tz'));
+        const key = `h2h_v1_${a}_${b}_${tz}`;
+        const hit = await cacheGet(env, key, 3600);
+        if (hit) return json({ success: true, fromRealApi: true, cached: true, data: hit });
+        const { response, errors } = await callApiRaw(env, `/fixtures/headtohead?h2h=${a}-${b}&last=10&timezone=${encodeURIComponent(tz)}`);
+        if (errors && response.length === 0) return json({ success: true, fromRealApi: true, data: [], apiError: errors });
+        const compact = response.map(compactFixture);
+        await cacheSet(env, key, compact, 3600);
+        return json({ success: true, fromRealApi: true, cached: false, data: compact });
+      }
+
+      if (url.pathname === '/api/fixture') {
+        if (!configured) return json({ success: true, fromRealApi: false });
+        const id = apiId(url.searchParams.get('id'));
+        if (!id) return json({ success: false, error: 'Identifiant de match invalide' }, 400);
+        const key = `fixture_v1_${id}`;
+        const hit = await cacheGet(env, key, liveTtl);
+        if (hit) return json({ success: true, fromRealApi: true, cached: true, data: hit });
+        const { response, errors } = await callApiRaw(env, `/fixtures?id=${id}`);
+        if (!response[0]) return json({ success: true, fromRealApi: true, data: null, apiError: errors || 'Match introuvable' });
+        const compact = compactFixture(response[0]);
+        await cacheSet(env, key, compact, ['FT', 'AET', 'PEN'].includes(compact.fixture.status.short) ? 21600 : liveTtl);
         return json({ success: true, fromRealApi: true, cached: false, data: compact });
       }
 

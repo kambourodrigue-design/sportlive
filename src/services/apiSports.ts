@@ -1,10 +1,10 @@
 import { Match, MatchStatus, SportId } from '../types';
 import { toLocalISODate } from '../utils/date';
 
-// Autres sports (API-Sports) : basket, rugby, hockey, handball. Le tennis n'est pas inclus dans cette offre.
-export const API_SPORTS: SportId[] = ['basketball', 'rugby', 'hockey', 'handball'];
+// Autres sports (API-Sports) : basket. Le tennis n'est pas inclus dans cette offre (affiché « bientôt disponible »).
+export const API_SPORTS: SportId[] = ['basketball'];
 
-const EMOJI: Record<string, string> = { basketball: '🏀', rugby: '🏉', hockey: '🏒', handball: '🤾' };
+const EMOJI: Record<string, string> = { basketball: '🏀', tennis: '🎾' };
 
 const LIVE_CODES = new Set(['Q1', 'Q2', 'Q3', 'Q4', 'OT', 'BT', 'HT', 'P1', 'P2', 'P3', 'PT', 'H1', 'H2', 'ET', 'LIVE']);
 const FINISHED_CODES = new Set(['FT', 'AOT', 'AET', 'AP']);

@@ -5,7 +5,6 @@ import {
 import { Navbar } from './components/Navbar';
 import { DateStrip } from './components/DateStrip';
 import { MatchList } from './components/MatchList';
-import { MatchDetailModal } from './components/MatchDetailModal';
 import { SportSelectorModal } from './components/SportSelectorModal';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
 import { NotificationHistoryModal } from './components/NotificationHistoryModal';
@@ -16,6 +15,14 @@ import { LiveToast } from './components/LiveToast';
 import { PronosticsSection, PicksTeaser } from './components/PronosticsSection';
 import { AuthModal, AuthMode } from './components/AuthModal';
 import { useAuth } from './hooks/useAuth';
+import { Footer } from './components/Footer';
+import { StaticPage, PAGES } from './pages/StaticPages';
+import { LeaguePage } from './pages/LeaguePage';
+import { TeamPage } from './pages/TeamPage';
+import { MatchPage } from './pages/MatchPage';
+import { Link, leagueUrl, matchRoute, matchUrl, navigate, usePath } from './router';
+import { AfricanLeague, fetchAfricanLeagues } from './services/football';
+import { frCountry, isAfricanLeague } from './utils/africa';
 import { useDayFixtures } from './hooks/useDayFixtures';
 import { useNews } from './hooks/useNews';
 import { BottomNavigation } from './components/BottomNavigation';
@@ -54,7 +61,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<MainNavTab>('tous');
   const [selectedDate, setSelectedDate] = useState<string>(() => toLocalISODate(new Date()));
   const [activeFilter, setActiveFilter] = useState<'all' | 'live' | 'finished'>('all');
-  const [selectedStandingsLeagueId, setSelectedStandingsLeagueId] = useState<string | undefined>(undefined);
+  const [africaOnly, setAfricaOnly] = useState(false);
+  const route = matchRoute(usePath());
 
   // Compte utilisateur (accès aux pronostics IA)
   const { user, checking: authChecking, submit: submitAuth, signOut, sessionLost } = useAuth();
@@ -65,7 +73,6 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
 
   // Engine hook
   const {
@@ -99,9 +106,29 @@ export default function App() {
 
   // Vrais matchs du jour choisi (si API configurée). Sinon : matchs de démonstration.
   const apiConfigured = apiStatus.configured;
-  const { dayMatches, loading: dayLoading, error: dayError } = useDayFixtures(selectedDate, apiConfigured, activeSport);
+  const isTennis = activeSport === 'tennis'; // pas encore de fournisseur de données : « bientôt disponible »
+  const { dayMatches, loading: dayLoading, error: dayError } = useDayFixtures(selectedDate, apiConfigured && !isTennis, activeSport);
 
   const isFootball = activeSport === 'football';
+
+  // Championnats africains de la saison (identifiants fournis par l'API)
+  const [africanLeagues, setAfricanLeagues] = useState<AfricanLeague[]>([]);
+  useEffect(() => {
+    if (!apiConfigured) return;
+    let alive = true;
+    fetchAfricanLeagues().then((l) => alive && setAfricanLeagues(l));
+    return () => {
+      alive = false;
+    };
+  }, [apiConfigured]);
+
+  // Titre de l'onglet selon la page
+  useEffect(() => {
+    const base = 'ScoreAfrica - Résultats Sportifs en Direct & Pronostics IA';
+    if (route.name === 'home') document.title = base;
+    else if (route.name === 'page') document.title = `${PAGES[route.slug].title} - ScoreAfrica`;
+    else if (route.name === 'notfound') document.title = 'Page introuvable - ScoreAfrica';
+  }, [route]);
 
   const displayMatches = useMemo<Match[]>(() => {
     if (!apiConfigured) return matches.filter((m) => m.sportId === activeSport);
@@ -119,15 +146,27 @@ export default function App() {
     source.forEach((m) => {
       if (!known.has(m.leagueId)) {
         known.add(m.leagueId);
-        extra.push({ id: m.leagueId, name: m.leagueName, country: m.leagueCountry, flag: m.leagueFlag, order: 1000 + extra.length });
+        const african = isFootball && isAfricanLeague(m.leagueCountry, m.leagueName);
+        extra.push({
+          id: m.leagueId,
+          name: m.leagueName,
+          country: frCountry(m.leagueCountry),
+          flag: african ? '🌍' : m.leagueFlag,
+          order: (african ? 100 : 1000) + extra.length, // les compétitions africaines passent juste après les favorites
+        });
       }
     });
     return [...leagues, ...extra];
   }, [leagues, displayMatches, matches, apiConfigured, isFootball]);
 
+  const tousMatches = useMemo(
+    () => (africaOnly ? displayMatches.filter((m) => isAfricanLeague(m.leagueCountry, m.leagueName)) : displayMatches),
+    [africaOnly, displayMatches],
+  );
+
   // La fiche détaillée (stats, compositions) n'existe que pour le football
   const handleSelectMatch = (m: Match) => {
-    if (m.sportId === 'football') setSelectedMatch(m);
+    if (m.sportId === 'football') navigate(matchUrl(m.id));
   };
 
   // Counts
@@ -158,10 +197,7 @@ export default function App() {
   };
 
   const handleSelectMatchById = (matchId: string) => {
-    const found = displayMatches.find((m) => m.id === matchId) ?? matches.find((m) => m.id === matchId);
-    if (found) {
-      setSelectedMatch(found);
-    }
+    navigate(matchUrl(matchId));
   };
 
   // Test notification helper
@@ -173,6 +209,7 @@ export default function App() {
     <div className="min-h-screen fs-bg text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       
       {/* Top App Bar */}
+      <div className={route.name === 'match' || route.name === 'league' || route.name === 'team' ? 'hidden md:block md:sticky md:top-0 md:z-40' : 'contents'}>
       <Navbar
         sports={uiSports}
         activeSport={activeSport}
@@ -193,6 +230,7 @@ export default function App() {
         onOpenAuth={() => setAuthMode('login')}
         onSignOut={signOut}
       />
+      </div>
 
       {/* Floating Live Notification Toast */}
       <LiveToast
@@ -203,6 +241,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 pb-28 md:pb-28">
+        {route.name === 'home' && (<>
         
         {/* TAB: TOUS LES MATCHS */}
         {activeTab === 'tous' && (
@@ -214,9 +253,11 @@ export default function App() {
               totalMatchesCount={totalMatchesCount}
               activeFilter={activeFilter}
               onChangeFilter={setActiveFilter}
+              africaOnly={africaOnly}
+              onToggleAfrica={isFootball ? () => setAfricaOnly((v) => !v) : undefined}
             />
 
-            {apiConfigured && (dayLoading || dayError || displayMatches.length === 0) && (
+            {apiConfigured && !isTennis && (dayLoading || dayError || displayMatches.length === 0) && (
               <p className="max-w-7xl mx-auto px-4 pt-3 text-xs text-slate-500 dark:text-slate-400" role="status">
                 {dayLoading
                   ? 'Chargement des matchs...'
@@ -229,16 +270,14 @@ export default function App() {
             <PicksTeaser loggedIn={Boolean(user)} onOpen={() => setActiveTab('pronostics')} />
 
             <MatchList
+              comingSoon={isTennis}
               leagues={displayLeagues}
-              matches={displayMatches}
+              matches={tousMatches}
               favoriteMatchIds={favoriteMatchIds}
               onToggleFavoriteMatch={toggleFavoriteMatch}
               onToggleFavoriteLeague={toggleFavoriteLeague}
               onSelectMatch={handleSelectMatch}
-              onOpenLeagueStandings={(leagueId) => {
-                setSelectedStandingsLeagueId(leagueId);
-                setActiveTab('classements');
-              }}
+              onOpenLeagueStandings={(leagueId) => navigate(leagueUrl(leagueId))}
               activeFilter={activeFilter}
             />
           </div>
@@ -274,16 +313,14 @@ export default function App() {
             )}
 
             <MatchList
+              comingSoon={isTennis}
               leagues={displayLeagues}
               matches={apiConfigured ? liveMatches : displayMatches.filter((m) => m.isLive)}
               favoriteMatchIds={favoriteMatchIds}
               onToggleFavoriteMatch={toggleFavoriteMatch}
               onToggleFavoriteLeague={toggleFavoriteLeague}
               onSelectMatch={handleSelectMatch}
-              onOpenLeagueStandings={(leagueId) => {
-                setSelectedStandingsLeagueId(leagueId);
-                setActiveTab('classements');
-              }}
+              onOpenLeagueStandings={(leagueId) => navigate(leagueUrl(leagueId))}
               activeFilter="live"
             />
           </div>
@@ -312,16 +349,14 @@ export default function App() {
             </div>
 
             <MatchList
+              comingSoon={isTennis}
               leagues={displayLeagues}
               matches={displayMatches}
               favoriteMatchIds={favoriteMatchIds}
               onToggleFavoriteMatch={toggleFavoriteMatch}
               onToggleFavoriteLeague={toggleFavoriteLeague}
               onSelectMatch={handleSelectMatch}
-              onOpenLeagueStandings={(leagueId) => {
-                setSelectedStandingsLeagueId(leagueId);
-                setActiveTab('classements');
-              }}
+              onOpenLeagueStandings={(leagueId) => navigate(leagueUrl(leagueId))}
               activeFilter="all"
               onlyFavorites={true}
             />
@@ -340,22 +375,45 @@ export default function App() {
 
         {/* TAB: CLASSEMENTS / CHAMPIONNATS */}
         {activeTab === 'classements' && (
-          <StandingsSection initialCompetitionId={selectedStandingsLeagueId} />
+          <StandingsSection africanLeagues={africanLeagues} apiConfigured={apiConfigured} />
         )}
 
+        </>)}
+
+        {route.name === 'league' && (
+          <LeaguePage routeId={route.id} apiConfigured={apiConfigured} africanLeagues={africanLeagues} demoMatches={[...matches, ...displayMatches]} />
+        )}
+        {route.name === 'team' && <TeamPage routeId={route.id} apiConfigured={apiConfigured} demoMatches={[...matches, ...displayMatches]} />}
+        {route.name === 'match' && (
+          <MatchPage
+            routeId={route.id}
+            matches={[...displayMatches, ...matches]}
+            isFavorite={(id) => favoriteMatchIds.includes(id)}
+            onToggleFavorite={toggleFavoriteMatch}
+            onSimulateGoal={triggerGoalSimulation}
+          />
+        )}
+        {route.name === 'page' && <StaticPage slug={route.slug} />}
+        {route.name === 'notfound' && (
+          <div className="max-w-xl mx-auto px-4 py-24 text-center">
+            <p className="text-5xl font-black fs-text-gradient">404</p>
+            <h1 className="mt-3 text-xl font-black text-slate-900 dark:text-white">Page introuvable</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Cette adresse n'existe pas ou a été déplacée.</p>
+            <Link to="/" className="inline-block mt-6 px-5 py-2.5 rounded-xl bg-accent-600 text-white font-bold text-sm">
+              Retour aux matchs
+            </Link>
+          </div>
+        )}
+
+        <Footer />
       </main>
 
       {/* Fixed Bottom Navigation Bar (Matching Screenshots 2, 3, 4, 5) */}
       <BottomNavigation
-        activeTab={activeTab}
+        activeTab={route.name === 'home' ? activeTab : null}
         onTabChange={(tab) => {
-          if (tab === 'classements') {
-            // If already on classements or switching to it, let user see all championships list if desired
-            if (activeTab === 'classements') {
-              setSelectedStandingsLeagueId(undefined);
-            }
-          }
           setActiveTab(tab);
+          if (route.name !== 'home') navigate('/');
         }}
         liveMatchesCount={liveMatchesCount}
         favoritesCount={favoriteMatchIds.length}
@@ -368,14 +426,6 @@ export default function App() {
         sports={uiSports}
         activeSport={activeSport}
         onSelectSport={setActiveSport}
-      />
-
-      <MatchDetailModal
-        match={selectedMatch}
-        onClose={() => setSelectedMatch(null)}
-        isFavorite={selectedMatch ? favoriteMatchIds.includes(selectedMatch.id) : false}
-        onToggleFavorite={toggleFavoriteMatch}
-        onSimulateGoal={triggerGoalSimulation}
       />
 
       <NotificationSettingsModal

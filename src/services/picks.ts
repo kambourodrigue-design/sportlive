@@ -65,6 +65,12 @@ export interface HistoryEntry {
   score?: string;
 }
 
+export interface PeriodStats {
+  won: number;
+  lost: number;
+  rate: number | null;
+}
+
 export interface HistoryStats {
   total: number;
   won: number;
@@ -72,16 +78,20 @@ export interface HistoryStats {
   pending: number;
   void: number;
   rate: number | null; // % de réussite sur les pronostics réglés
+  last7?: PeriodStats;
+  last30?: PeriodStats;
+  streak?: { type: 'won' | 'lost'; count: number } | null;
+  form?: ('won' | 'lost')[];
   byModel?: { model: string; won: number; lost: number; rate: number | null }[];
 }
 
-export async function fetchPicksHistory(): Promise<{ stats: HistoryStats; entries: HistoryEntry[] } | null> {
+export async function fetchPicksHistory(): Promise<{ stats: HistoryStats; entries: HistoryEntry[]; updatedAt?: string } | null> {
   try {
     const res = await fetch('/api/picks/history', { credentials: 'same-origin' });
     if (!res.ok) return null;
     const json = await res.json();
     if (!json.success) return null;
-    return { stats: json.stats, entries: Array.isArray(json.entries) ? json.entries : [] };
+    return { stats: json.stats, entries: Array.isArray(json.entries) ? json.entries : [], updatedAt: json.updatedAt };
   } catch {
     return null;
   }

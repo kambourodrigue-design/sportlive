@@ -1,6 +1,9 @@
 import React from 'react';
 import { Star, Bell, Activity } from 'lucide-react';
 import { Match } from '../types';
+import { Link, teamUrl } from '../router';
+import { Logo } from './Logo';
+import { teamLogoUrl } from '../services/football';
 
 interface MatchRowProps {
   match: Match;
@@ -10,6 +13,16 @@ interface MatchRowProps {
   onQuickAlertToggle?: (matchId: string) => void;
 }
 
+// Nom d'équipe cliquable (page équipe) pour les vrais matchs
+const TeamName: React.FC<{ real: boolean; id: string; name: string; className: string }> = ({ real, id, name, className }) =>
+  real && /^\d+$/.test(id) ? (
+    <Link to={teamUrl(id)} onClick={(e) => e.stopPropagation()} className={`${className} hover:text-accent-600 dark:hover:text-cyan-300`}>
+      {name}
+    </Link>
+  ) : (
+    <span className={className}>{name}</span>
+  );
+
 export const MatchRow: React.FC<MatchRowProps> = ({
   match,
   isFavorite,
@@ -17,6 +30,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({
   onSelectMatch,
   onQuickAlertToggle,
 }) => {
+  const isReal = match.id.startsWith('apif-');
   const isGoalHighlighted = match.lastGoalHighlight && (Date.now() - match.lastGoalHighlight.timestamp < 12000);
 
   const renderStatus = () => {
@@ -88,18 +102,17 @@ export const MatchRow: React.FC<MatchRowProps> = ({
         {/* Home Team */}
         <div className="flex items-center justify-between py-0.5">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-base select-none shrink-0" aria-hidden="true">
-              {match.homeTeam.logo}
-            </span>
-            <span
+            <Logo src={isReal ? teamLogoUrl(match.homeTeam.id) : undefined} fallback={match.homeTeam.logo} size={20} />
+            <TeamName
+              real={isReal}
+              id={match.homeTeam.id}
+              name={match.homeTeam.name}
               className={`text-sm truncate font-medium ${
                 match.score.home > match.score.away && match.status === 'FINISHED'
                   ? 'font-bold text-slate-900 dark:text-white'
                   : 'text-slate-800 dark:text-slate-200'
               }`}
-            >
-              {match.homeTeam.name}
-            </span>
+            />
             {/* Red card pill if applicable */}
             {match.hasRedCard && match.hasRedCard.home > 0 && (
               <span className="px-1 py-0.2 text-[10px] font-bold rounded bg-accent-600 text-white shrink-0 shadow-xs">
@@ -112,18 +125,17 @@ export const MatchRow: React.FC<MatchRowProps> = ({
         {/* Away Team */}
         <div className="flex items-center justify-between py-0.5">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-base select-none shrink-0" aria-hidden="true">
-              {match.awayTeam.logo}
-            </span>
-            <span
+            <Logo src={isReal ? teamLogoUrl(match.awayTeam.id) : undefined} fallback={match.awayTeam.logo} size={20} />
+            <TeamName
+              real={isReal}
+              id={match.awayTeam.id}
+              name={match.awayTeam.name}
               className={`text-sm truncate font-medium ${
                 match.score.away > match.score.home && match.status === 'FINISHED'
                   ? 'font-bold text-slate-900 dark:text-white'
                   : 'text-slate-800 dark:text-slate-200'
               }`}
-            >
-              {match.awayTeam.name}
-            </span>
+            />
             {/* Red card pill if applicable */}
             {match.hasRedCard && match.hasRedCard.away > 0 && (
               <span className="px-1 py-0.2 text-[10px] font-bold rounded bg-accent-600 text-white shrink-0 shadow-xs">

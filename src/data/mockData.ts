@@ -4,9 +4,6 @@ export const INITIAL_SPORTS: SportInfo[] = [
   { id: 'football', name: 'Football', iconName: 'Flame', liveCount: 23, totalCount: 169 },
   { id: 'tennis', name: 'Tennis', iconName: 'Activity', liveCount: 18, totalCount: 406 },
   { id: 'basketball', name: 'Basket', iconName: 'Dribbble', liveCount: 20, totalCount: 83 },
-  { id: 'rugby', name: 'Rugby', iconName: 'Shield', liveCount: 2, totalCount: 24 },
-  { id: 'hockey', name: 'Hockey', iconName: 'Zap', liveCount: 23, totalCount: 67 },
-  { id: 'handball', name: 'Handball', iconName: 'Award', liveCount: 3, totalCount: 22 },
 ];
 
 export const INITIAL_LEAGUES: League[] = [

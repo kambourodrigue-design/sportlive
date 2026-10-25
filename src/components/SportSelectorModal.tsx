@@ -4,10 +4,7 @@ import {
   ArrowUpDown, 
   Flame, 
   Activity, 
-  Dribbble, 
-  Shield, 
-  Zap, 
-  Award 
+  Dribbble
 } from 'lucide-react';
 import { SportId, SportInfo } from '../types';
 
@@ -36,12 +33,6 @@ export const SportSelectorModal: React.FC<SportSelectorModalProps> = ({
         return <Activity className="w-5 h-5 text-lime-500" />;
       case 'basketball':
         return <Dribbble className="w-5 h-5 text-orange-500" />;
-      case 'rugby':
-        return <Shield className="w-5 h-5 text-amber-600" />;
-      case 'hockey':
-        return <Zap className="w-5 h-5 text-sky-500" />;
-      case 'handball':
-        return <Award className="w-5 h-5 text-purple-500" />;
       default:
         return <Flame className="w-5 h-5 text-accent-500" />;
     }
@@ -132,7 +123,7 @@ export const SportSelectorModal: React.FC<SportSelectorModalProps> = ({
         {/* Footer info */}
         <div className="p-4 bg-slate-50 dark:bg-slate-950/40 border-t border-slate-100 dark:border-slate-800 text-center">
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Flux de données et cotes en direct actualisés en continu
+            Scores en direct actualisés toutes les 2 minutes
           </p>
         </div>
       </div>

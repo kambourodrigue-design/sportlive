@@ -10,7 +10,7 @@ import {
 import { MainNavTab } from '../types';
 
 interface BottomNavigationProps {
-  activeTab: MainNavTab;
+  activeTab: MainNavTab | null;
   onTabChange: (tab: MainNavTab) => void;
   liveMatchesCount: number;
   favoritesCount: number;
