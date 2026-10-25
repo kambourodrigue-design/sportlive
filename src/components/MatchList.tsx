@@ -86,7 +86,7 @@ export const MatchList: React.FC<MatchListProps> = ({
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3 space-y-3">
+    <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3 grid gap-3 lg:grid-cols-2 items-start">
       {groupedLeagues.map(({ league, matches: leagueMatches, liveCount }, leagueIndex) => {
         const isCollapsed = collapsedLeagues[league.id];
 
@@ -141,7 +141,7 @@ export const MatchList: React.FC<MatchListProps> = ({
                       e.stopPropagation();
                       onOpenLeagueStandings(league.id);
                     }}
-                    className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors"
+                    className="p-1 rounded text-slate-400 hover:text-accent-600 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors"
                     title="Voir le classement de ce championnat"
                   >
                     <Trophy className="w-3.5 h-3.5" />
@@ -152,7 +152,7 @@ export const MatchList: React.FC<MatchListProps> = ({
               {/* Right: Live count + Collapse Chevron */}
               <div className="flex items-center gap-2 shrink-0">
                 {liveCount > 0 && (
-                  <span className="px-1.5 py-0.2 text-[10px] font-bold rounded bg-red-600 text-white tabular-nums shadow-xs">
+                  <span className="px-1.5 py-0.2 text-[10px] font-bold rounded bg-accent-600 text-white tabular-nums shadow-xs">
                     {liveCount}
                   </span>
                 )}

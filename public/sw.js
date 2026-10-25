@@ -1,5 +1,5 @@
 // Service worker minimal : l'app s'ouvre même hors-ligne ; l'API (/api/*) n'est jamais mise en cache ici.
-const CACHE = 'fsn-v1';
+const CACHE = 'scoreafrica-v2';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

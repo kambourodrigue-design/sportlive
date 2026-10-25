@@ -172,7 +172,7 @@ const AdminPanel: React.FC = () => {
     <p
       role={msg.type === 'err' ? 'alert' : 'status'}
       className={`rounded-xl px-3 py-2 text-sm ${
-        msg.type === 'err' ? 'bg-red-500/15 text-red-700 dark:text-red-300' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+        msg.type === 'err' ? 'bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
       }`}
     >
       {msg.text}
@@ -396,7 +396,7 @@ const AdminPanel: React.FC = () => {
                   <button className={secondary} onClick={() => togglePublish(a)}>
                     {a.status === 'published' ? 'Dépublier' : 'Publier'}
                   </button>
-                  <button className={`${secondary} inline-flex items-center gap-1 text-red-600 dark:text-red-300`} onClick={() => remove(a)}>
+                  <button className={`${secondary} inline-flex items-center gap-1 text-fuchsia-600 dark:text-fuchsia-300`} onClick={() => remove(a)}>
                     <Trash2 className="w-3.5 h-3.5" /> Supprimer
                   </button>
                 </div>

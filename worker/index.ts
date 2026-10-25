@@ -3,6 +3,7 @@
 type KV = {
   get(key: string): Promise<string | null>;
   put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
 };
 
 interface Env {
@@ -299,7 +300,7 @@ function parseRss(xml: string, category: string): NewsItem[] {
 async function loadNews(): Promise<NewsItem[]> {
   const settled = await Promise.allSettled(
     NEWS_FEEDS.map(async (f) => {
-      const res = await fetch(f.url, { headers: { 'user-agent': 'FlashScoreNext/1.0 (+rss reader)' } });
+      const res = await fetch(f.url, { headers: { 'user-agent': 'ScoreAfrica/1.0 (+rss reader)' } });
       if (!res.ok) throw new Error(`RSS ${res.status}`);
       return parseRss(await res.text(), f.category);
     }),
@@ -986,6 +987,166 @@ async function handleAdmin(request: Request, env: Env, url: URL): Promise<Respon
   return json({ success: false, error: 'Not found' }, 404);
 }
 
+// ---------- Comptes utilisateurs (accès aux pronostics IA) ----------
+// Mots de passe : PBKDF2-SHA256 + sel aléatoire (jamais stockés en clair).
+// Session : jeton aléatoire dans un cookie HttpOnly ; seule son empreinte SHA-256 est gardée dans le KV.
+interface UserRec {
+  email: string;
+  name: string;
+  salt: string;
+  hash: string;
+  createdAt: string;
+}
+interface SessionRec {
+  email: string;
+  exp: number;
+}
+
+const SESSION_COOKIE = 'fsn_session';
+const SESSION_DAYS = 30;
+const PBKDF2_ITERATIONS = 100_000; // maximum accepté par Cloudflare Workers
+const memStore = new Map<string, string>(); // repli sans KV (local) : perdu au redémarrage
+
+const toHex = (bytes: Uint8Array): string => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+const fromHex = (hex: string): Uint8Array<ArrayBuffer> => new Uint8Array((hex.match(/../g) || []).map((h) => parseInt(h, 16)));
+
+async function sha256Hex(text: string): Promise<string> {
+  return toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', textEncoder.encode(text))));
+}
+
+async function kvRead(env: Env, key: string): Promise<string | null> {
+  if (env.CACHE) return env.CACHE.get(key);
+  return memStore.get(key) ?? null;
+}
+async function kvWrite(env: Env, key: string, value: string, ttlSec?: number): Promise<void> {
+  if (env.CACHE) await env.CACHE.put(key, value, ttlSec ? { expirationTtl: Math.max(60, ttlSec) } : undefined);
+  else memStore.set(key, value);
+}
+async function kvRemove(env: Env, key: string): Promise<void> {
+  if (env.CACHE) await env.CACHE.delete(key);
+  else memStore.delete(key);
+}
+
+async function hashPassword(password: string, salt: BufferSource): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', textEncoder.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: PBKDF2_ITERATIONS }, key, 256);
+  return toHex(new Uint8Array(bits));
+}
+
+const userKey = async (email: string) => `user_${await sha256Hex(email)}`;
+
+async function loadUser(env: Env, email: string): Promise<UserRec | null> {
+  try {
+    const raw = await kvRead(env, await userKey(email));
+    return raw ? (JSON.parse(raw) as UserRec) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readCookie(request: Request, name: string): string {
+  for (const part of (request.headers.get('cookie') || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim();
+  }
+  return '';
+}
+
+// Utilisateur connecté (null si pas de session valide)
+async function getSessionUser(request: Request, env: Env): Promise<{ name: string; email: string } | null> {
+  const token = readCookie(request, SESSION_COOKIE);
+  if (!/^[A-Za-z0-9_-]{40,60}$/.test(token)) return null;
+  try {
+    const raw = await kvRead(env, `sess_${await sha256Hex(token)}`);
+    if (!raw) return null;
+    const sess = JSON.parse(raw) as SessionRec;
+    if (!(sess.exp > Date.now())) return null;
+    const user = await loadUser(env, sess.email);
+    return user ? { name: user.name, email: user.email } : null;
+  } catch {
+    return null;
+  }
+}
+
+function sessionCookie(token: string, maxAgeSec: number, secure: boolean): string {
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${secure ? '; Secure' : ''}`;
+}
+
+function jsonWithCookie(body: unknown, cookie: string, status = 200): Response {
+  const res = json(body, status);
+  res.headers.append('set-cookie', cookie);
+  return res;
+}
+
+async function startSession(env: Env, user: { name: string; email: string }, secure: boolean): Promise<Response> {
+  const token = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  const sess: SessionRec = { email: user.email, exp: Date.now() + SESSION_DAYS * 86400e3 };
+  await kvWrite(env, `sess_${await sha256Hex(token)}`, JSON.stringify(sess), SESSION_DAYS * 86400);
+  return jsonWithCookie({ success: true, user: { name: user.name, email: user.email } }, sessionCookie(token, SESSION_DAYS * 86400, secure));
+}
+
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/;
+
+async function handleAuth(request: Request, env: Env, url: URL): Promise<Response> {
+  const secure = url.protocol === 'https:';
+  const path = url.pathname;
+
+  if (path === '/api/auth/me' && request.method === 'GET') {
+    return json({ success: true, user: await getSessionUser(request, env) });
+  }
+  if (request.method !== 'POST') return json({ success: false, error: 'Méthode non autorisée' }, 405);
+
+  if (path === '/api/auth/logout') {
+    const token = readCookie(request, SESSION_COOKIE);
+    if (/^[A-Za-z0-9_-]{40,60}$/.test(token)) await kvRemove(env, `sess_${await sha256Hex(token)}`).catch(() => {});
+    return jsonWithCookie({ success: true }, sessionCookie('', 0, secure));
+  }
+
+  const body = await readJson(request).catch(() => ({}));
+  const email = cleanText(body.email, 254).toLowerCase();
+  const password = typeof body.password === 'string' ? body.password : '';
+  const ip = request.headers.get('cf-connecting-ip') || 'local';
+
+  if (!EMAIL_RE.test(email)) return json({ success: false, error: 'Adresse e-mail invalide.' }, 400);
+
+  if (path === '/api/auth/register') {
+    const regKey = `reg_ip_${await sha256Hex(ip)}`;
+    const regCount = Number((await cacheGet(env, regKey, 3600)) ?? 0);
+    if (regCount >= 10) return json({ success: false, error: 'Trop de créations de compte. Réessaie dans une heure.' }, 429);
+    if (password.length < 8 || password.length > 128) {
+      return json({ success: false, error: 'Le mot de passe doit contenir entre 8 et 128 caractères.' }, 400);
+    }
+    if (await loadUser(env, email)) return json({ success: false, error: 'Un compte existe déjà avec cet e-mail. Connecte-toi.' }, 409);
+
+    const name = cleanText(body.name, 40) || email.split('@')[0].slice(0, 40);
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const user: UserRec = { email, name, salt: toHex(salt), hash: await hashPassword(password, salt), createdAt: new Date().toISOString() };
+    await kvWrite(env, await userKey(email), JSON.stringify(user));
+    await cacheSet(env, regKey, regCount + 1, 3600);
+    return startSession(env, user, secure);
+  }
+
+  if (path === '/api/auth/login') {
+    // Blocage temporaire après 5 échecs (par e-mail + adresse IP)
+    const failKey = `login_fail_u_${await sha256Hex(`${ip}|${email}`)}`;
+    const fails = Number((await cacheGet(env, failKey, 900)) ?? 0);
+    if (fails >= 5) return json({ success: false, error: 'Trop de tentatives. Réessaie dans 15 minutes.' }, 429);
+
+    const user = await loadUser(env, email);
+    // Même travail de calcul que le compte existe ou non (pas de fuite par le temps de réponse)
+    const salt = user ? fromHex(user.salt) : new Uint8Array(16);
+    const given = await hashPassword(password.slice(0, 128), salt);
+    if (!user || !safeEqual(textEncoder.encode(given), textEncoder.encode(user.hash))) {
+      await cacheSet(env, failKey, fails + 1, 900);
+      return json({ success: false, error: 'E-mail ou mot de passe incorrect.' }, 401);
+    }
+    await cacheSet(env, failKey, 0, 60);
+    return startSession(env, user, secure);
+  }
+
+  return json({ success: false, error: 'Not found' }, 404);
+}
+
 export default {
   async scheduled(event: { cron: string }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
     ctx.waitUntil(runCron(env, event.cron));
@@ -994,7 +1155,7 @@ export default {
   async fetch(request: Request, env: Env, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
     const configured = isConfigured(env);
-    const liveTtl = Math.max(15, parseInt(env.LIVE_CACHE_SECONDS || '60', 10));
+    const liveTtl = Math.max(15, parseInt(env.LIVE_CACHE_SECONDS || '100', 10));
 
     try {
       if (url.pathname === '/api/status') {
@@ -1049,6 +1210,13 @@ export default {
       }
 
       if (url.pathname.startsWith('/api/admin/')) return await handleAdmin(request, env, url);
+
+      if (url.pathname.startsWith('/api/auth/')) return await handleAuth(request, env, url);
+
+      // Pronostics IA : réservés aux comptes connectés
+      if ((url.pathname === '/api/picks' || url.pathname === '/api/picks/history') && !(await getSessionUser(request, env))) {
+        return json({ success: false, error: 'auth_required' }, 401);
+      }
 
       if (url.pathname === '/api/news') {
         const ttl = Math.max(60, parseInt(env.NEWS_CACHE_SECONDS || '900', 10)); // 15 min par défaut

@@ -87,7 +87,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-red-100 dark:bg-red-950/50 text-red-600 dark:text-red-400">
+            <div className="p-2 rounded-xl bg-accent-100 dark:bg-accent-950/50 text-accent-600 dark:text-cyan-300">
               <Bell className="w-5 h-5" />
             </div>
             <div>
@@ -154,7 +154,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
             <button
               onClick={() => handleToggle('enabled')}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                settings.enabled ? 'bg-red-600' : 'bg-slate-300 dark:bg-slate-700'
+                settings.enabled ? 'bg-accent-600' : 'bg-slate-300 dark:bg-slate-700'
               }`}
             >
               <span
@@ -177,7 +177,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                 <Volume2 className="w-4 h-4 text-slate-500" />
                 <div>
                   <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                    Sons de stade (Flashscore)
+                    Sons de stade
                   </p>
                   <p className="text-xs text-slate-400">
                     Chime signature de but et sifflet d&apos;arbitre
@@ -188,7 +188,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                 type="checkbox"
                 checked={settings.sound}
                 onChange={() => handleToggle('sound')}
-                className="w-4 h-4 accent-red-600 rounded"
+                className="w-4 h-4 accent-accent-600 rounded"
               />
             </div>
 
@@ -209,7 +209,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                 type="checkbox"
                 checked={settings.inAppToast}
                 onChange={() => handleToggle('inAppToast')}
-                className="w-4 h-4 accent-red-600 rounded"
+                className="w-4 h-4 accent-accent-600 rounded"
               />
             </div>
 
@@ -230,7 +230,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                 type="checkbox"
                 checked={settings.vibrate}
                 onChange={() => handleToggle('vibrate')}
-                className="w-4 h-4 accent-red-600 rounded"
+                className="w-4 h-4 accent-accent-600 rounded"
               />
             </div>
 
@@ -284,7 +284,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                     onClick={() => handleToggle(`events.${item.key}`)}
                     className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition-colors ${
                       isChecked
-                        ? 'border-red-300 bg-red-50/50 dark:border-red-900/60 dark:bg-red-950/20 text-slate-900 dark:text-white font-semibold'
+                        ? 'border-accent-300 bg-accent-50/50 dark:border-accent-900/60 dark:bg-accent-950/20 text-slate-900 dark:text-white font-semibold'
                         : 'border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-300'
                     }`}
                   >
@@ -293,7 +293,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                       type="checkbox"
                       checked={isChecked}
                       readOnly
-                      className="w-3.5 h-3.5 accent-red-600 rounded"
+                      className="w-3.5 h-3.5 accent-accent-600 rounded"
                     />
                   </button>
                 );
@@ -307,7 +307,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
               onClick={() => {
                 onTriggerTestAlert();
               }}
-              className="w-full py-3 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 active:scale-98 transition-all"
+              className="w-full py-3 px-4 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-accent-600/20 active:scale-98 transition-all"
             >
               <Zap className="w-4 h-4" />
               <span>Tester une alerte de but en direct (Son + Toast)</span>

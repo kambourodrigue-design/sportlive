@@ -35,7 +35,7 @@ export const DateStrip: React.FC<DateStripProps> = ({
                 onClick={() => onSelectDate(item.fullDate)}
                 className={`relative px-3.5 py-1.5 flex flex-col items-center transition-all min-w-[58px] ${
                   isSelected
-                    ? 'text-red-600 dark:text-red-500 font-bold'
+                    ? 'text-accent-600 dark:text-cyan-300 font-bold'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium'
                 }`}
               >
@@ -68,7 +68,7 @@ export const DateStrip: React.FC<DateStripProps> = ({
           <h1 className="text-sm font-bold text-slate-900 dark:text-white">
             Tous les matchs
           </h1>
-          <span className="ml-1 px-2 py-0.5 text-xs font-bold rounded bg-red-600 text-white tabular-nums shadow-sm shadow-red-500/20">
+          <span className="ml-1 px-2 py-0.5 text-xs font-bold rounded bg-accent-600 text-white tabular-nums shadow-sm shadow-accent-500/20">
             {liveMatchesCount}
           </span>
           <span className="text-xs font-medium text-slate-400 tabular-nums">
@@ -92,7 +92,7 @@ export const DateStrip: React.FC<DateStripProps> = ({
             onClick={() => onChangeFilter('live')}
             className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
               activeFilter === 'live'
-                ? 'bg-red-600 text-white shadow-sm'
+                ? 'bg-accent-600 text-white shadow-sm'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >

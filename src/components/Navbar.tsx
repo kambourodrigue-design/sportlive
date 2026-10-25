@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   Bell, 
   ChevronDown, 
@@ -10,8 +10,11 @@ import {
   Sun, 
   Zap, 
   FastForward,
-  Flame
+  Flame,
+  LogIn,
+  LogOut
 } from 'lucide-react';
+import { AuthUser } from '../services/auth';
 import { SportId, SportInfo } from '../types';
 import { InstallButton } from './InstallButton';
 
@@ -30,6 +33,10 @@ interface NavbarProps {
   simulationSpeed: number;
   onChangeSpeed: () => void;
   onTriggerGoal: () => void;
+  user: AuthUser | null;
+  authChecking: boolean;
+  onOpenAuth: () => void;
+  onSignOut: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -47,7 +54,21 @@ export const Navbar: React.FC<NavbarProps> = ({
   simulationSpeed,
   onChangeSpeed,
   onTriggerGoal,
+  user,
+  authChecking,
+  onOpenAuth,
+  onSignOut,
 }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [menuOpen]);
   const currentSport = sports.find((s) => s.id === activeSport) || sports[0];
 
   return (
@@ -59,9 +80,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="hidden min-[420px]:flex items-center gap-2">
             <span className="font-extrabold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
               <span className="w-8 h-8 rounded-lg fs-logo text-white flex items-center justify-center font-black text-lg font-display">
-                F
+                S
               </span>
-              <span className="hidden sm:inline font-black font-display tracking-wide">FLASH<span className="fs-text-gradient">SCORE</span></span>
+              <span className="hidden sm:inline font-black font-display tracking-wide">SCORE<span className="fs-text-gradient">AFRICA</span></span>
             </span>
           </div>
 
@@ -74,7 +95,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span className="capitalize truncate max-w-[72px] sm:max-w-none">{currentSport.name}</span>
             {currentSport.liveCount > 0 && (
-              <span className="px-1.5 py-0.2 text-[11px] font-bold rounded bg-red-600 text-white tabular-nums">
+              <span className="px-1.5 py-0.2 text-[11px] font-bold rounded bg-accent-600 text-white tabular-nums">
                 {currentSport.liveCount}
               </span>
             )}
@@ -89,7 +110,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="hidden md:flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
             <button
               onClick={onToggleSimulation}
-              className="p-1 rounded text-slate-700 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+              className="p-1 rounded text-slate-700 dark:text-slate-300 hover:text-accent-600 dark:hover:text-accent-400 transition-colors"
               title={isSimulating ? "Mettre en pause la simulation" : "Reprendre la simulation"}
             >
               {isSimulating ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 text-emerald-500" />}
@@ -104,7 +125,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="w-px h-3 bg-slate-300 dark:bg-slate-700 mx-0.5"></div>
             <button
               onClick={onTriggerGoal}
-              className="flex items-center gap-1 px-2 py-0.5 rounded font-medium text-[11px] bg-red-600 hover:bg-red-700 text-white transition-colors"
+              className="flex items-center gap-1 px-2 py-0.5 rounded font-medium text-[11px] bg-accent-600 hover:bg-accent-700 text-white transition-colors"
               title="Simuler un but en direct avec alerte sonore"
             >
               <Zap className="w-3 h-3" />
@@ -117,7 +138,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Search Trigger */}
           <button
             onClick={onOpenSearch}
-            className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5 text-sm"
+            className="max-[340px]:hidden p-1.5 sm:px-3 sm:py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5 text-sm"
             aria-label="Rechercher des équipes ou matchs"
           >
             <Search className="w-4 h-4" />
@@ -147,7 +168,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Bell className="w-4 h-4" />
             {unreadNotificationsCount > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center animate-bounce">
+              <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-accent-600 text-white text-[10px] font-bold flex items-center justify-center animate-bounce">
                 {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
               </span>
             )}
@@ -162,6 +183,49 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <SlidersHorizontal className="w-4 h-4" />
           </button>
+
+          {/* Compte : bouton « Se connecter » ou menu du membre */}
+          {!authChecking && !user && (
+            <button
+              onClick={onOpenAuth}
+              className="ml-0.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-accent-600 text-white text-xs font-bold whitespace-nowrap hover:brightness-110"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span className="hidden min-[400px]:inline">Se connecter</span>
+              <span className="hidden min-[350px]:inline min-[400px]:hidden">Connexion</span>
+              <span className="sr-only min-[350px]:hidden">Se connecter</span>
+            </button>
+          )}
+          {user && (
+            <div className="relative ml-0.5" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                className="w-8 h-8 rounded-full fs-logo text-white text-sm font-black flex items-center justify-center uppercase"
+                aria-label="Mon compte"
+                aria-expanded={menuOpen}
+              >
+                {user.name.charAt(0)}
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 mt-2 w-60 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-2 animate-fade-in z-50">
+                  <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{user.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onSignOut();
+                    }}
+                    className="mt-1 w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Se déconnecter
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
       </div>

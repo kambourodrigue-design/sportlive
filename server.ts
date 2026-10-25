@@ -58,7 +58,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`FlashScore Next server running at http://localhost:${PORT}`);
+    console.log(`ScoreAfrica server running at http://localhost:${PORT}`);
   });
 }
 

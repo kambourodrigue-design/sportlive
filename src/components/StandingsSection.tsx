@@ -124,7 +124,7 @@ export const StandingsSection: React.FC<StandingsSectionProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Rechercher un championnat ou un pays..."
-              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-red-500"
+              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-accent-500"
             />
           </div>
         </div>
@@ -162,13 +162,13 @@ export const StandingsSection: React.FC<StandingsSectionProps> = ({
                   <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider leading-none">
                     {comp.country}
                   </p>
-                  <p className="text-sm font-bold text-slate-900 dark:text-white mt-1 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors truncate">
+                  <p className="text-sm font-bold text-slate-900 dark:text-white mt-1 group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors truncate">
                     {comp.name}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0 text-slate-400 group-hover:text-red-500 transition-colors">
+              <div className="flex items-center gap-2 shrink-0 text-slate-400 group-hover:text-accent-500 transition-colors">
                 <span className="text-xs hidden sm:inline font-medium">Voir le classement</span>
                 <ChevronRight className="w-4 h-4" />
               </div>
@@ -202,13 +202,13 @@ export const StandingsSection: React.FC<StandingsSectionProps> = ({
                       <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider leading-none">
                         {comp.country}
                       </p>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white mt-1 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors truncate">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white mt-1 group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors truncate">
                         {comp.name}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0 text-slate-400 group-hover:text-red-500 transition-colors">
+                  <div className="flex items-center gap-2 shrink-0 text-slate-400 group-hover:text-accent-500 transition-colors">
                     <ChevronRight className="w-4 h-4" />
                   </div>
                 </button>
@@ -230,7 +230,7 @@ export const StandingsSection: React.FC<StandingsSectionProps> = ({
       <div className="flex items-center justify-between">
         <button
           onClick={() => setActiveCompetition(null)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all shadow-xs"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-accent-600 dark:hover:text-accent-400 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all shadow-xs"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Tous les championnats</span>
@@ -251,7 +251,7 @@ export const StandingsSection: React.FC<StandingsSectionProps> = ({
               onClick={() => setActiveCompetition(comp)}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 shadow-xs ${
                 isSelected
-                  ? 'bg-red-600 text-white shadow-red-500/20'
+                  ? 'bg-accent-600 text-white shadow-accent-500/20'
                   : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200/80 dark:border-slate-700'
               }`}
             >
@@ -342,7 +342,7 @@ export const StandingsSection: React.FC<StandingsSectionProps> = ({
                     <span
                       className={`inline-block w-5 h-5 rounded-full text-center leading-5 text-[10px] ${
                         row.rank <= 4
-                          ? 'bg-red-600 text-white font-black'
+                          ? 'bg-accent-600 text-white font-black'
                           : row.rank <= 6
                           ? 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-400'
                           : 'text-slate-500'
@@ -369,7 +369,7 @@ export const StandingsSection: React.FC<StandingsSectionProps> = ({
                     {row.goalDiff > 0 ? `+${row.goalDiff}` : row.goalDiff}
                   </td>
                   {/* PTS (in bold red tabular text like in screenshot) */}
-                  <td className="py-3 px-3 text-center tabular-nums font-black text-sm text-red-600 dark:text-red-500">
+                  <td className="py-3 px-3 text-center tabular-nums font-black text-sm text-accent-600 dark:text-cyan-300">
                     {row.points}
                   </td>
 
@@ -384,7 +384,7 @@ export const StandingsSection: React.FC<StandingsSectionProps> = ({
                               ? 'bg-emerald-600'
                               : res === 'D'
                               ? 'bg-slate-400'
-                              : 'bg-red-600'
+                              : 'bg-fuchsia-600'
                           }`}
                         >
                           {res}
@@ -428,7 +428,7 @@ export const StandingsSection: React.FC<StandingsSectionProps> = ({
                   <td className="py-3 px-3 text-slate-500">
                     {scorer.team}
                   </td>
-                  <td className="py-3 px-3 text-center tabular-nums font-black text-sm text-red-600 dark:text-red-500">
+                  <td className="py-3 px-3 text-center tabular-nums font-black text-sm text-accent-600 dark:text-cyan-300">
                     {scorer.goals}
                   </td>
                   <td className="py-3 px-3 text-center tabular-nums text-slate-600 dark:text-slate-300">
@@ -447,7 +447,7 @@ export const StandingsSection: React.FC<StandingsSectionProps> = ({
       {/* Qualifications Legend */}
       <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-400 px-2 pt-1">
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-600" />
+          <span className="w-2.5 h-2.5 rounded-full bg-accent-600" />
           <span>Qualification Phase Finale / Ligue des Champions</span>
         </div>
         <div className="flex items-center gap-1.5">

@@ -70,7 +70,7 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
             
             <div className="absolute top-4 left-4">
-              <span className="px-2.5 py-1 rounded-md bg-red-600 text-white text-[11px] font-black uppercase tracking-wider">
+              <span className="px-2.5 py-1 rounded-md bg-accent-600 text-white text-[11px] font-black uppercase tracking-wider">
                 {featured.category}
               </span>
             </div>
@@ -85,7 +85,7 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
                 </span>
               </div>
 
-              <h2 className="text-lg sm:text-2xl font-extrabold leading-snug drop-shadow-sm group-hover:text-red-300 transition-colors">
+              <h2 className="text-lg sm:text-2xl font-extrabold leading-snug drop-shadow-sm group-hover:text-accent-300 transition-colors">
                 {featured.title}
               </h2>
             </div>
@@ -106,7 +106,7 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
                   <>Source : {featured.sourceName ?? featured.author}</>
                 )}
               </span>
-              <span className="font-semibold text-red-600 dark:text-red-400 flex items-center gap-1">
+              <span className="font-semibold text-accent-600 dark:text-cyan-300 flex items-center gap-1">
                 Lire <ChevronRight className="w-3.5 h-3.5" />
               </span>
             </div>
@@ -128,10 +128,10 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
 
             <div className="flex-1 flex flex-col justify-between">
               <div>
-                <span className="text-[10px] font-bold text-red-600 uppercase tracking-wider">
+                <span className="text-[10px] font-bold text-accent-600 uppercase tracking-wider">
                   {item.category}
                 </span>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors line-clamp-2 mt-0.5">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors line-clamp-2 mt-0.5">
                   {item.title}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-1">
@@ -156,7 +156,7 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
             
             {/* Top Bar */}
             <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
-              <span className="text-xs font-bold text-red-600 uppercase">
+              <span className="text-xs font-bold text-accent-600 uppercase">
                 {selectedArticle.sourceName ?? 'Actualités'} · {selectedArticle.category}
               </span>
               <button

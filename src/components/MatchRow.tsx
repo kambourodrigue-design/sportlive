@@ -22,7 +22,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({
   const renderStatus = () => {
     if (match.status === 'HALF_TIME') {
       return (
-        <span className="text-xs font-bold text-red-600 dark:text-red-500 whitespace-nowrap">
+        <span className="text-xs font-bold text-accent-600 dark:text-cyan-300 whitespace-nowrap">
           Mi-temps
         </span>
       );
@@ -43,8 +43,8 @@ export const MatchRow: React.FC<MatchRowProps> = ({
     }
     // Live minutes
     return (
-      <span className="flex items-center gap-1 text-xs font-bold text-red-600 dark:text-red-500 tabular-nums whitespace-nowrap">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-600 dark:bg-red-500 animate-ping inline-block" />
+      <span className="flex items-center gap-1 text-xs font-bold text-accent-600 dark:text-cyan-300 tabular-nums whitespace-nowrap">
+        <span className="w-1.5 h-1.5 rounded-full bg-accent-600 dark:bg-accent-500 animate-ping inline-block" />
         {match.periodLabel ?? `${match.minute}'`}
       </span>
     );
@@ -59,7 +59,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({
     >
       {/* Goal flash glow indicator */}
       {isGoalHighlighted && (
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-red-600 animate-pulse" />
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-accent-600 animate-pulse" />
       )}
 
       {/* Left: Star Button */}
@@ -102,7 +102,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({
             </span>
             {/* Red card pill if applicable */}
             {match.hasRedCard && match.hasRedCard.home > 0 && (
-              <span className="px-1 py-0.2 text-[10px] font-bold rounded bg-red-600 text-white shrink-0 shadow-xs">
+              <span className="px-1 py-0.2 text-[10px] font-bold rounded bg-accent-600 text-white shrink-0 shadow-xs">
                 {match.hasRedCard.home}
               </span>
             )}
@@ -126,7 +126,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({
             </span>
             {/* Red card pill if applicable */}
             {match.hasRedCard && match.hasRedCard.away > 0 && (
-              <span className="px-1 py-0.2 text-[10px] font-bold rounded bg-red-600 text-white shrink-0 shadow-xs">
+              <span className="px-1 py-0.2 text-[10px] font-bold rounded bg-accent-600 text-white shrink-0 shadow-xs">
                 {match.hasRedCard.away}
               </span>
             )}
@@ -148,7 +148,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({
             <span
               className={`transition-all ${
                 match.isLive
-                  ? 'text-red-600 dark:text-red-500 font-extrabold'
+                  ? 'text-accent-600 dark:text-cyan-300 font-extrabold'
                   : 'text-slate-900 dark:text-white'
               } ${isGoalHighlighted && match.lastGoalHighlight?.team === 'home' ? 'scale-125 text-amber-500' : ''}`}
             >
@@ -157,7 +157,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({
             <span
               className={`transition-all ${
                 match.isLive
-                  ? 'text-red-600 dark:text-red-500 font-extrabold'
+                  ? 'text-accent-600 dark:text-cyan-300 font-extrabold'
                   : 'text-slate-900 dark:text-white'
               } ${isGoalHighlighted && match.lastGoalHighlight?.team === 'away' ? 'scale-125 text-amber-500' : ''}`}
             >
@@ -178,7 +178,7 @@ export const MatchRow: React.FC<MatchRowProps> = ({
                 e.stopPropagation();
                 onQuickAlertToggle(match.id);
               }}
-              className="p-1 text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
+              className="p-1 text-slate-400 hover:text-accent-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
               title="Configurer alertes du match"
             >
               <Bell className="w-3.5 h-3.5" />

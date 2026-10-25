@@ -98,7 +98,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
                 <div className="flex items-center gap-2 shrink-0">
                   {match.status !== 'SCHEDULED' && (
-                    <span className="text-xs font-bold text-red-600 tabular-nums">
+                    <span className="text-xs font-bold text-accent-600 tabular-nums">
                       {match.score.home} - {match.score.away}
                     </span>
                   )}

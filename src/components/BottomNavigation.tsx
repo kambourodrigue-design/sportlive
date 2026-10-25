@@ -4,7 +4,8 @@ import {
   Radio, 
   Star, 
   Newspaper, 
-  Trophy 
+  Trophy,
+  Sparkles
 } from 'lucide-react';
 import { MainNavTab } from '../types';
 
@@ -42,6 +43,12 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
       badge: favoritesCount > 0 ? favoritesCount : null,
     },
     {
+      id: 'pronostics' as MainNavTab,
+      label: 'Pronos IA',
+      icon: Sparkles,
+      badge: null,
+    },
+    {
       id: 'actualites' as MainNavTab,
       label: 'Actualités',
       icon: Newspaper,
@@ -49,7 +56,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
     },
     {
       id: 'classements' as MainNavTab,
-      label: 'Championnats',
+      label: 'Ligues',
       icon: Trophy,
       badge: null,
     },
@@ -57,7 +64,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-40 px-3 pb-3 pointer-events-none" aria-label="Navigation principale">
-      <div className="pointer-events-auto max-w-md mx-auto fs-dock grid grid-cols-5 h-[62px] items-stretch px-1">
+      <div className="pointer-events-auto max-w-lg mx-auto fs-dock grid grid-cols-6 h-[62px] items-stretch px-1">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -82,12 +89,12 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
                 {/* Pastille de comptage ou balise « direct » */}
                 {tab.badge !== null && (
-                  <span className="absolute -top-2 -right-3.5 px-1 min-w-4 rounded-full bg-red-500 text-white text-[9px] font-black text-center tabular-nums leading-4 shadow-[0_0_10px_rgba(255,45,85,0.7)]">
+                  <span className="absolute -top-2 -right-3.5 px-1 min-w-4 rounded-full bg-accent-500 text-white text-[9px] font-black text-center tabular-nums leading-4 shadow-[0_0_10px_rgba(34,211,238,0.7)]">
                     {tab.badge}
                   </span>
                 )}
                 {tab.isLiveBeacon && (
-                  <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-red-500 animate-ping pointer-events-none" />
+                  <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-accent-500 animate-ping pointer-events-none" />
                 )}
               </div>
 

@@ -915,7 +915,7 @@ export const INITIAL_NEWS: NewsArticle[] = [
     category: 'LIGUE 1',
     timeAgo: 'Il y a 18 min',
     imageUrl: '/src/assets/images/psg_ucl_celebration_1791478790067.jpg',
-    author: 'Flashscore Rédaction',
+    author: 'ScoreAfrica Rédaction',
     views: 14200,
     content: [
       'À la suite de la victoire européenne étincelante face à Arsenal, Luis Enrique et son staff médical ont dressé un premier bilan physique de l’effectif parisien.',
@@ -930,7 +930,7 @@ export const INITIAL_NEWS: NewsArticle[] = [
     category: 'LALIGA',
     timeAgo: 'Il y a 42 min',
     imageUrl: '/src/assets/images/el_clasico_match_1791478806454.jpg',
-    author: 'Flashscore Espagne',
+    author: 'ScoreAfrica Espagne',
     views: 28900,
     content: [
       'Le 258e Clásico de l’histoire tient toutes ses promesses. Dans une enceinte madrilène comble et surchauffée, Kylian Mbappé a rapidement trouvé la faille sur une ouverture millimétrée de Vinicius Jr.',
@@ -945,7 +945,7 @@ export const INITIAL_NEWS: NewsArticle[] = [
     category: 'EUROPE',
     timeAgo: 'Il y a 2 h',
     imageUrl: '/src/assets/images/ceferin_uefa_press_1791478825438.jpg',
-    author: 'Flashscore UEFA',
+    author: 'ScoreAfrica UEFA',
     views: 8900,
     content: [
       'En conférence de presse officielle, Aleksander Čeferin a dressé un premier bilan très positif de la nouvelle phase de ligue unique en Ligue des Champions.',

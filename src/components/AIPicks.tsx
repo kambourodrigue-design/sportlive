@@ -6,13 +6,18 @@ import { PicksHistory } from './PicksHistory';
 const formatKickoff = (iso: string) =>
   new Date(iso).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
-export const AIPicks: React.FC = () => {
+export const AIPicks: React.FC<{ onAuthLost?: () => void; defaultHistoryOpen?: boolean }> = ({ onAuthLost, defaultHistoryOpen }) => {
   const [result, setResult] = useState<PicksResult | null>(() => readCachedPicks());
 
   useEffect(() => {
     let alive = true;
     fetchPicks().then((r) => {
       if (!alive) return;
+      if (r.state === 'auth') {
+        setResult(null);
+        onAuthLost?.(); // session expirée : on repasse à l'écran de connexion
+        return;
+      }
       // En cas d'erreur réseau, on garde les pronostics déjà affichés
       setResult((prev) => (r.state === 'error' && prev?.state === 'ok' ? prev : r));
     });
@@ -105,7 +110,7 @@ export const AIPicks: React.FC = () => {
           Analyses indicatives générées par IA, sans aucune garantie de résultat. Jouez de façon responsable.
         </p>
 
-        <PicksHistory reloadKey={result?.state ?? 'loading'} />
+        <PicksHistory reloadKey={result?.state ?? 'loading'} defaultOpen={defaultHistoryOpen} />
       </div>
     </section>
   );

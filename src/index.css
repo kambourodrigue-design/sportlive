@@ -20,16 +20,16 @@
   --color-slate-900: #0f1530;
   --color-slate-950: #070b1b;
 
-  /* Rouge = signal « direct / alerte » */
-  --color-red-50: #fff1f3;
-  --color-red-100: #ffe0e5;
-  --color-red-300: #ff9fb0;
-  --color-red-400: #ff6b87;
-  --color-red-500: #ff2d55;
-  --color-red-600: #e5173f;
-  --color-red-700: #bf0f34;
-  --color-red-900: #6b0a1e;
-  --color-red-950: #3a0510;
+  /* Accent électrique (violet -> bleu) : remplace l'ancien rouge */
+  --color-accent-50: #f3f0ff;
+  --color-accent-100: #e6e0ff;
+  --color-accent-300: #b6a6ff;
+  --color-accent-400: #937cff;
+  --color-accent-500: #7c5cff;
+  --color-accent-600: #6a43f5;
+  --color-accent-700: #5530d6;
+  --color-accent-900: #2c1a7a;
+  --color-accent-950: #170d45;
 }
 
 @layer base {
@@ -72,16 +72,18 @@
   pointer-events: none;
   will-change: transform;
   background-image:
-    radial-gradient(38% 32% at 22% 24%, rgba(124, 92, 255, 0.22), transparent 70%),
+    radial-gradient(38% 32% at 22% 24%, rgba(124, 92, 255, 0.30), transparent 70%),
     radial-gradient(34% 28% at 80% 18%, rgba(34, 211, 238, 0.20), transparent 70%),
-    radial-gradient(40% 34% at 62% 86%, rgba(255, 61, 172, 0.10), transparent 70%);
+    radial-gradient(40% 34% at 62% 86%, rgba(217, 70, 239, 0.16), transparent 70%),
+    radial-gradient(26% 22% at 8% 78%, rgba(52, 245, 165, 0.14), transparent 70%);
   animation: fs-drift 40s ease-in-out infinite alternate;
 }
 .dark .fs-bg::before {
   background-image:
-    radial-gradient(38% 32% at 22% 24%, rgba(124, 92, 255, 0.42), transparent 70%),
-    radial-gradient(34% 28% at 80% 18%, rgba(34, 211, 238, 0.30), transparent 70%),
-    radial-gradient(40% 34% at 62% 86%, rgba(255, 61, 172, 0.20), transparent 70%);
+    radial-gradient(38% 32% at 22% 24%, rgba(124, 92, 255, 0.55), transparent 70%),
+    radial-gradient(34% 28% at 80% 18%, rgba(34, 211, 238, 0.40), transparent 70%),
+    radial-gradient(40% 34% at 62% 86%, rgba(217, 70, 239, 0.30), transparent 70%),
+    radial-gradient(26% 22% at 8% 78%, rgba(52, 245, 165, 0.22), transparent 70%);
 }
 @keyframes fs-drift {
   from { transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1); }
@@ -169,14 +171,14 @@
   mask-composite: exclude;
 }
 
-/* Championnat avec du direct : bordure rouge néon -> cyan ; les 3 premiers tournent doucement */
+/* Championnat avec du direct : bordure cyan néon -> violet ; les 3 premiers tournent doucement */
 .fs-card-live::before {
-  background: linear-gradient(140deg, rgba(255, 45, 85, 0.85), rgba(34, 211, 238, 0.55) 55%, rgba(255, 255, 255, 0) 90%);
+  background: linear-gradient(140deg, rgba(34, 211, 238, 0.95), rgba(124, 92, 255, 0.60) 55%, rgba(255, 255, 255, 0) 90%);
 }
-.fs-card-live { box-shadow: 0 0 28px -10px rgba(255, 45, 85, 0.45), 0 14px 40px -18px rgba(0, 0, 0, 0.6); }
+.fs-card-live { box-shadow: 0 0 30px -8px rgba(34, 211, 238, 0.55), 0 14px 40px -18px rgba(0, 0, 0, 0.6); }
 @media (prefers-reduced-motion: no-preference) {
   .fs-card-spin::before {
-    background: conic-gradient(from var(--fs-angle), rgba(255, 45, 85, 0) 0%, rgba(255, 45, 85, 0.95) 12%, rgba(34, 211, 238, 0.85) 24%, rgba(255, 45, 85, 0) 38%, rgba(124, 92, 255, 0.35) 70%, rgba(255, 45, 85, 0) 100%);
+    background: conic-gradient(from var(--fs-angle), rgba(34, 211, 238, 0) 0%, rgba(34, 211, 238, 0.95) 12%, rgba(52, 245, 165, 0.85) 24%, rgba(34, 211, 238, 0) 38%, rgba(124, 92, 255, 0.55) 70%, rgba(34, 211, 238, 0) 100%);
     animation: fs-spin 6s linear infinite;
   }
 }
@@ -205,7 +207,7 @@
   box-shadow: 0 0 20px rgba(34, 211, 238, 0.32), inset 0 0 0 1px rgba(34, 211, 238, 0.38);
 }
 
-/* ---------- Match en direct : trait néon + score lumineux ---------- */
+/* ---------- Match en direct : trait néon cyan/menthe + score lumineux ---------- */
 .fs-live-row::before {
   content: '';
   position: absolute;
@@ -213,28 +215,71 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(to bottom, #ff2d55, #ff6b87);
-  box-shadow: 0 0 14px 1px rgba(255, 45, 85, 0.65);
+  background: linear-gradient(to bottom, #22d3ee, #34f5a5);
+  box-shadow: 0 0 14px 1px rgba(34, 211, 238, 0.7);
   animation: fs-bar-pulse 2.2s ease-in-out infinite;
 }
-.fs-live-row { background-image: linear-gradient(90deg, rgba(255, 45, 85, 0.08), transparent 40%); }
-.dark .fs-live-row .tabular-nums { text-shadow: 0 0 14px rgba(255, 90, 120, 0.45); }
+.fs-live-row { background-image: linear-gradient(90deg, rgba(34, 211, 238, 0.10), transparent 40%); }
+.dark .fs-live-row .tabular-nums { text-shadow: 0 0 14px rgba(52, 245, 165, 0.55); }
 @keyframes fs-bar-pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
 
 /* ---------- Logo ---------- */
 .fs-logo {
-  background: linear-gradient(135deg, #7c5cff, #22d3ee);
-  box-shadow: 0 0 18px rgba(34, 211, 238, 0.45);
+  background: linear-gradient(135deg, #7c5cff, #22d3ee 60%, #34f5a5);
+  box-shadow: 0 0 22px rgba(34, 211, 238, 0.55);
 }
 .fs-text-gradient {
-  background: linear-gradient(90deg, #8b7bff, #22d3ee);
+  background: linear-gradient(90deg, #a78bff, #22d3ee 55%, #34f5a5);
+  background-size: 200% 100%;
+  animation: fs-shine 8s ease-in-out infinite alternate;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
+/* ---------- Fluidité & effets futuristes ---------- */
+html { scroll-behavior: smooth; }
+::selection { background: rgba(124, 92, 255, 0.45); color: #fff; }
+button, a, input, select, [role='button'] {
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s, color 0.2s,
+    border-color 0.2s, box-shadow 0.25s, filter 0.2s, opacity 0.2s;
+}
+button:active { transform: scale(0.96); }
+
+/* Boutons et pastilles d'accent : dégradé électrique lumineux */
+.bg-accent-600 {
+  background-image: linear-gradient(135deg, #7c5cff 0%, #3b82f6 55%, #22d3ee 120%);
+  box-shadow: 0 6px 18px -8px rgba(99, 102, 241, 0.75);
+}
+button.bg-accent-600:hover, a.bg-accent-600:hover { filter: brightness(1.15) saturate(1.1); }
+.bg-accent-500 {
+  background-image: linear-gradient(135deg, #7c5cff, #22d3ee);
+}
+
+/* Cartes : apparition douce + survol lumineux */
+.fs-card {
+  animation: fs-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s;
+}
+@media (hover: hover) {
+  .fs-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 44px -16px rgba(124, 92, 255, 0.55), 0 0 26px -10px rgba(34, 211, 238, 0.5);
+  }
+}
+@keyframes fs-rise {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fs-shine { to { background-position: 100% 0; } }
+
+/* Lignes de match : survol en dégradé */
+.fs-live-row:hover, .fs-card [class*='cursor-pointer']:hover {
+  background-image: linear-gradient(90deg, rgba(124, 92, 255, 0.10), rgba(34, 211, 238, 0.08) 60%, transparent);
+}
+
 /* Barres de défilement fines */
-* { scrollbar-width: thin; scrollbar-color: rgba(120, 135, 190, 0.45) transparent; }
+* { scrollbar-width: thin; scrollbar-color: rgba(124, 92, 255, 0.55) transparent; }
 
 @keyframes slideDown {
   from { opacity: 0; transform: translateY(-20px); }

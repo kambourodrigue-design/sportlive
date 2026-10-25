@@ -22,10 +22,10 @@ export const LiveToast: React.FC<LiveToastProps> = ({
           onSelectMatch(notification.matchId);
           onDismiss();
         }}
-        className="bg-slate-900/95 dark:bg-black/95 text-white backdrop-blur-xl rounded-2xl p-4 shadow-[0_0_32px_-4px_rgba(255,45,85,0.55)] border border-red-500/70 cursor-pointer hover:border-red-400 transition-all flex items-start gap-3.5"
+        className="bg-slate-900/95 dark:bg-black/95 text-white backdrop-blur-xl rounded-2xl p-4 shadow-[0_0_32px_-4px_rgba(34,211,238,0.55)] border border-accent-500/70 cursor-pointer hover:border-accent-400 transition-all flex items-start gap-3.5"
       >
         {/* Glow indicator */}
-        <div className="p-2.5 rounded-xl bg-red-600/30 text-red-400 shrink-0 border border-red-500/40">
+        <div className="p-2.5 rounded-xl bg-accent-600/30 text-accent-400 shrink-0 border border-accent-500/40">
           <span className="text-xl">
             {notification.type === 'GOAL' ? '⚽' : notification.type === 'RED_CARD' ? '🟥' : '🔔'}
           </span>
@@ -34,7 +34,7 @@ export const LiveToast: React.FC<LiveToastProps> = ({
         {/* Text */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black tracking-wider text-red-400 uppercase">
+            <span className="text-xs font-black tracking-wider text-accent-400 uppercase">
               ALERTE EN DIRECT
             </span>
             <div className="flex items-center gap-1.5 text-slate-400">
@@ -60,7 +60,7 @@ export const LiveToast: React.FC<LiveToastProps> = ({
             {notification.message}
           </p>
 
-          <div className="flex items-center gap-1 text-[11px] font-bold text-red-400 mt-2">
+          <div className="flex items-center gap-1 text-[11px] font-bold text-accent-400 mt-2">
             <span>Ouvrir le match</span>
             <ArrowRight className="w-3 h-3" />
           </div>

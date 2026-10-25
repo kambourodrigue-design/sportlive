@@ -12,7 +12,7 @@ export interface AiPick {
 }
 
 export interface PicksResult {
-  state: 'ok' | 'empty' | 'demo' | 'no-ai' | 'error';
+  state: 'ok' | 'empty' | 'demo' | 'no-ai' | 'error' | 'auth';
   picks: AiPick[];
 }
 
@@ -32,7 +32,8 @@ export function readCachedPicks(): PicksResult | null {
 
 export async function fetchPicks(): Promise<PicksResult> {
   try {
-    const res = await fetch('/api/picks');
+    const res = await fetch('/api/picks', { credentials: 'same-origin' });
+    if (res.status === 401) return { state: 'auth', picks: [] };
     if (!res.ok) throw new Error('picks unavailable');
     const json = await res.json();
     if (!json.success) return { state: 'error', picks: [] };
@@ -76,7 +77,7 @@ export interface HistoryStats {
 
 export async function fetchPicksHistory(): Promise<{ stats: HistoryStats; entries: HistoryEntry[] } | null> {
   try {
-    const res = await fetch('/api/picks/history');
+    const res = await fetch('/api/picks/history', { credentials: 'same-origin' });
     if (!res.ok) return null;
     const json = await res.json();
     if (!json.success) return null;

@@ -123,7 +123,7 @@ export function useLiveMatchEngine() {
     checkStatus().then((status) => {
       if (status.configured && isMounted) {
         pollLiveApi();
-        interval = setInterval(pollLiveApi, 60000); // 60s polling (le serveur met aussi en cache)
+        interval = setInterval(pollLiveApi, 120000); // toutes les 2 minutes (le serveur met aussi en cache)
       }
     });
 

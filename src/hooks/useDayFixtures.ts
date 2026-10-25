@@ -58,9 +58,8 @@ export function useDayFixtures(date: string, enabled: boolean, sport: SportId = 
     }
 
     load();
-    // Aujourd'hui : rafraîchissement toutes les 5 min (le direct est déjà suivi à part, chaque minute)
-    // Autres sports : mise à jour toutes les 3 min (leur quota est séparé de celui du football)
-    const every = sport === 'football' ? 300000 : 180000;
+    // Aujourd'hui : résultats rafraîchis toutes les 2 minutes (tous les sports)
+    const every = 120000;
     const timer = date === toLocalISODate(new Date()) ? setInterval(load, every) : undefined;
     return () => {
       alive = false;

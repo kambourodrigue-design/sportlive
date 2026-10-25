@@ -13,7 +13,9 @@ import { NewsSection } from './components/NewsSection';
 import { StandingsSection } from './components/StandingsSection';
 import { SearchModal } from './components/SearchModal';
 import { LiveToast } from './components/LiveToast';
-import { AIPicks } from './components/AIPicks';
+import { PronosticsSection, PicksTeaser } from './components/PronosticsSection';
+import { AuthModal, AuthMode } from './components/AuthModal';
+import { useAuth } from './hooks/useAuth';
 import { useDayFixtures } from './hooks/useDayFixtures';
 import { useNews } from './hooks/useNews';
 import { BottomNavigation } from './components/BottomNavigation';
@@ -53,6 +55,10 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState<string>(() => toLocalISODate(new Date()));
   const [activeFilter, setActiveFilter] = useState<'all' | 'live' | 'finished'>('all');
   const [selectedStandingsLeagueId, setSelectedStandingsLeagueId] = useState<string | undefined>(undefined);
+
+  // Compte utilisateur (accès aux pronostics IA)
+  const { user, checking: authChecking, submit: submitAuth, signOut, sessionLost } = useAuth();
+  const [authMode, setAuthMode] = useState<AuthMode | null>(null);
 
   // Modal states
   const [isSportSelectorOpen, setIsSportSelectorOpen] = useState(false);
@@ -182,6 +188,10 @@ export default function App() {
         simulationSpeed={simulationSpeed}
         onChangeSpeed={handleCycleSpeed}
         onTriggerGoal={() => triggerGoalSimulation()}
+        user={user}
+        authChecking={authChecking}
+        onOpenAuth={() => setAuthMode('login')}
+        onSignOut={signOut}
       />
 
       {/* Floating Live Notification Toast */}
@@ -216,7 +226,7 @@ export default function App() {
               </p>
             )}
 
-            <AIPicks />
+            <PicksTeaser loggedIn={Boolean(user)} onOpen={() => setActiveTab('pronostics')} />
 
             <MatchList
               leagues={displayLeagues}
@@ -238,7 +248,7 @@ export default function App() {
         {activeTab === 'direct' && (
           <div>
             {/* Live Header Banner */}
-            <div className="bg-red-600 text-white px-4 py-3 shadow-sm">
+            <div className="bg-accent-600 text-white px-4 py-3 shadow-sm">
               <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
@@ -258,7 +268,7 @@ export default function App() {
             </div>
 
             {(liveError || (!isFootball && dayError)) && (
-              <p className="max-w-7xl mx-auto px-4 pt-3 text-xs text-red-600 dark:text-red-300" role="alert">
+              <p className="max-w-7xl mx-auto px-4 pt-3 text-xs text-accent-600 dark:text-accent-300" role="alert">
                 Scores en direct indisponibles : {liveError ?? dayError}
               </p>
             )}
@@ -294,7 +304,7 @@ export default function App() {
                 </div>
                 <button
                   onClick={() => setIsSettingsOpen(true)}
-                  className="text-xs font-bold text-red-600 dark:text-red-400 hover:underline"
+                  className="text-xs font-bold text-accent-600 dark:text-accent-400 hover:underline"
                 >
                   Gérer les alertes
                 </button>
@@ -316,6 +326,11 @@ export default function App() {
               onlyFavorites={true}
             />
           </div>
+        )}
+
+        {/* TAB: PRONOSTICS IA (réservé aux comptes connectés) */}
+        {activeTab === 'pronostics' && (
+          <PronosticsSection user={user} checking={authChecking} onOpenAuth={setAuthMode} onSessionLost={sessionLost} />
         )}
 
         {/* TAB: ACTUALITÉS */}
@@ -380,6 +395,8 @@ export default function App() {
         onMarkAllAsRead={markAllNotificationsAsRead}
         onSelectMatchById={handleSelectMatchById}
       />
+
+      <AuthModal mode={authMode} onClose={() => setAuthMode(null)} onChangeMode={setAuthMode} onSubmit={submitAuth} />
 
       <SearchModal
         isOpen={isSearchOpen}

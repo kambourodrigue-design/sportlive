@@ -1,6 +1,8 @@
 {
-  "name": "FlashScore Next - Scores de Football en Direct & Alertes",
-  "description": "Application moderne et futuriste de scores de football en direct avec notifications personnalisées en temps réel, statistiques avancées, tracker de match 2D et thèmes clair et sombre.",
+  "name": "ScoreAfrica",
+  "description": "ScoreAfrica : résultats sportifs en direct, classements, actualités, alertes de buts et pronostics IA.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

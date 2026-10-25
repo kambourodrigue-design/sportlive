@@ -11,14 +11,14 @@ const RESULT_LABEL: Record<HistoryEntry['result'], string> = {
 
 const RESULT_STYLE: Record<HistoryEntry['result'], string> = {
   won: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-  lost: 'bg-red-500/15 text-red-700 dark:text-red-300',
+  lost: 'bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300',
   pending: 'bg-slate-500/15 text-slate-600 dark:text-slate-300',
   void: 'bg-slate-500/10 text-slate-500 dark:text-slate-400',
 };
 
-export const PicksHistory: React.FC<{ reloadKey?: string }> = ({ reloadKey }) => {
+export const PicksHistory: React.FC<{ reloadKey?: string; defaultOpen?: boolean }> = ({ reloadKey, defaultOpen }) => {
   const [data, setData] = useState<{ stats: HistoryStats; entries: HistoryEntry[] } | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(defaultOpen));
 
   useEffect(() => {
     let alive = true;

@@ -37,7 +37,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
 
   // Vrai match (API) : on charge ses vraies stats / compositions ; match de démonstration : données simulées
   const isReal = !!match && match.id.startsWith('apif-');
-  const detail = useMatchDetail(isReal && match ? match.id : null, isReal && match?.isLive ? 60000 : null);
+  const detail = useMatchDetail(isReal && match ? match.id : null, isReal && match?.isLive ? 120000 : null);
 
   useEffect(() => {
     if (isReal) setActiveTab('summary'); // le « terrain 2D » est une simulation : pas pour les vrais matchs
@@ -103,7 +103,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
               onClick={() => setMatchAlertsActive(!matchAlertsActive)}
               className={`p-1.5 rounded-lg text-xs transition-colors flex items-center gap-1 ${
                 matchAlertsActive
-                  ? 'bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400'
+                  ? 'bg-accent-50 text-accent-600 dark:bg-accent-950/50 dark:text-cyan-300'
                   : 'text-slate-400 hover:text-slate-700'
               }`}
               title={matchAlertsActive ? "Alertes actives pour ce match" : "Activer alertes"}
@@ -138,8 +138,8 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 mb-4">
             {match.isLive ? (
               <>
-                <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
-                <span className="text-red-600 dark:text-red-500 font-extrabold uppercase tracking-wide">
+                <span className="w-2 h-2 rounded-full bg-accent-600 animate-ping" />
+                <span className="text-accent-600 dark:text-cyan-300 font-extrabold uppercase tracking-wide">
                   {match.status === 'HALF_TIME' ? 'Mi-temps' : `${match.minute}' En Direct`}
                 </span>
               </>
@@ -170,9 +170,9 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             <div className="col-span-1 flex flex-col items-center justify-center">
               {match.status !== 'SCHEDULED' ? (
                 <div className="flex items-center gap-2 font-black text-3xl sm:text-4xl tracking-tight text-slate-900 dark:text-white tabular-nums">
-                  <span className={match.isLive ? 'text-red-600 dark:text-red-500' : ''}>{match.score.home}</span>
+                  <span className={match.isLive ? 'text-accent-600 dark:text-cyan-300' : ''}>{match.score.home}</span>
                   <span className="text-slate-300 dark:text-slate-600 text-2xl font-light">-</span>
-                  <span className={match.isLive ? 'text-red-600 dark:text-red-500' : ''}>{match.score.away}</span>
+                  <span className={match.isLive ? 'text-accent-600 dark:text-cyan-300' : ''}>{match.score.away}</span>
                 </div>
               ) : (
                 <span className="text-sm font-semibold text-slate-500">VS</span>
@@ -204,7 +204,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-center gap-2">
               <button
                 onClick={() => onSimulateGoal(match.id)}
-                className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                className="px-3 py-1 rounded-lg bg-accent-600 hover:bg-accent-700 text-white font-medium text-xs flex items-center gap-1.5 transition-colors shadow-xs"
               >
                 <Zap className="w-3.5 h-3.5" />
                 <span>Simuler un but sur ce match</span>
@@ -220,7 +220,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             onClick={() => setActiveTab('tracker')}
             className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'tracker'
-                ? 'border-red-600 text-red-600 dark:text-red-500'
+                ? 'border-accent-600 text-accent-600 dark:text-cyan-300'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
@@ -232,7 +232,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             onClick={() => setActiveTab('summary')}
             className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'summary'
-                ? 'border-red-600 text-red-600 dark:text-red-500'
+                ? 'border-accent-600 text-accent-600 dark:text-cyan-300'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
@@ -243,7 +243,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             onClick={() => setActiveTab('stats')}
             className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'stats'
-                ? 'border-red-600 text-red-600 dark:text-red-500'
+                ? 'border-accent-600 text-accent-600 dark:text-cyan-300'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
@@ -254,7 +254,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
             onClick={() => setActiveTab('lineups')}
             className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'lineups'
-                ? 'border-red-600 text-red-600 dark:text-red-500'
+                ? 'border-accent-600 text-accent-600 dark:text-cyan-300'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
@@ -308,7 +308,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                 {/* Live Phase Overlay Badge */}
                 <div className="absolute bottom-4 left-4 right-4 bg-slate-950/80 backdrop-blur-md rounded-lg p-2.5 flex items-center justify-between text-white text-xs border border-white/10">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="w-2 h-2 rounded-full bg-accent-500 animate-pulse" />
                     <span className="font-bold">
                       {match.pitchLive?.phase || 'En cours de jeu'}
                     </span>
@@ -362,7 +362,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                       {/* Event content */}
                       <div className="flex-1 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-red-600 dark:text-red-500 tabular-nums">
+                          <span className="font-bold text-accent-600 dark:text-cyan-300 tabular-nums">
                             {event.minute}&apos;
                           </span>
                           <span className="text-[11px] font-semibold text-slate-400">
@@ -415,7 +415,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                     {/* Progress dual bar */}
                     <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
                       <div
-                        className="h-full bg-red-600 transition-all duration-500 rounded-l-full"
+                        className="h-full bg-accent-600 transition-all duration-500 rounded-l-full"
                         style={{ width: `${homePct}%` }}
                       />
                       <div
@@ -446,7 +446,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({
                     <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
                       {match.homeTeam.name}
                     </span>
-                    <span className="text-[11px] font-mono text-red-600 font-bold">
+                    <span className="text-[11px] font-mono text-accent-600 font-bold">
                       {homeLineup.formation}
                     </span>
                   </div>

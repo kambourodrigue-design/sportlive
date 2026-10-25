@@ -31,7 +31,7 @@ export const SportSelectorModal: React.FC<SportSelectorModalProps> = ({
   const getSportIcon = (id: SportId) => {
     switch (id) {
       case 'football':
-        return <Flame className="w-5 h-5 text-red-500" />;
+        return <Flame className="w-5 h-5 text-accent-500" />;
       case 'tennis':
         return <Activity className="w-5 h-5 text-lime-500" />;
       case 'basketball':
@@ -43,7 +43,7 @@ export const SportSelectorModal: React.FC<SportSelectorModalProps> = ({
       case 'handball':
         return <Award className="w-5 h-5 text-purple-500" />;
       default:
-        return <Flame className="w-5 h-5 text-red-500" />;
+        return <Flame className="w-5 h-5 text-accent-500" />;
     }
   };
 
@@ -96,12 +96,12 @@ export const SportSelectorModal: React.FC<SportSelectorModalProps> = ({
                 }}
                 className={`w-full flex items-center justify-between px-5 py-3.5 transition-colors text-left ${
                   isSelected
-                    ? 'bg-red-50/60 dark:bg-red-950/20 font-semibold text-slate-900 dark:text-white'
+                    ? 'bg-accent-50/60 dark:bg-accent-950/20 font-semibold text-slate-900 dark:text-white'
                     : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-300'
                 }`}
               >
                 <div className="flex items-center gap-3.5">
-                  <div className={`p-2 rounded-xl ${isSelected ? 'bg-red-100 dark:bg-red-900/40' : 'bg-slate-100 dark:bg-slate-800'}`}>
+                  <div className={`p-2 rounded-xl ${isSelected ? 'bg-accent-100 dark:bg-accent-900/40' : 'bg-slate-100 dark:bg-slate-800'}`}>
                     {getSportIcon(sport.id)}
                   </div>
                   <div>
@@ -116,7 +116,7 @@ export const SportSelectorModal: React.FC<SportSelectorModalProps> = ({
 
                 <div className="flex items-center gap-3">
                   {sport.liveCount > 0 && (
-                    <span className="px-2 py-0.5 text-xs font-bold rounded-md bg-red-600 text-white tabular-nums shadow-sm shadow-red-500/20">
+                    <span className="px-2 py-0.5 text-xs font-bold rounded-md bg-accent-600 text-white tabular-nums shadow-sm shadow-accent-500/20">
                       {sport.liveCount}
                     </span>
                   )}

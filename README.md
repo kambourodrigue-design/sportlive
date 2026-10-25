@@ -1,4 +1,4 @@
-# FlashScore Next
+# ScoreAfrica
 
 Scores de football en direct (React + Vite + Express). Fonctionne sans clé en mode démonstration.
 
@@ -35,3 +35,9 @@ Flux RSS gratuits de Maxifoot (`/api/news`, cache 15 min, `NEWS_CACHE_SECONDS` p
 - Ajoute le secret `ADMIN_PASSWORD` dans Cloudflare, puis ouvre `ton-site/admin`.
 - Assistant IA : tu fournis les faits, l'IA rédige sans rien inventer (`[À VÉRIFIER]` pour ce qui manque) ; la publication est bloquée tant que ces marques restent dans le texte.
 - Les articles sont stockés dans le KV `CACHE`. Les articles publiés apparaissent en premier dans l'onglet Actualités, lisibles dans l'app.
+
+## Comptes et section Pronostics IA
+- Onglet « Pronos IA » et bouton « Se connecter » : l'accès aux pronostics exige un compte (e-mail + mot de passe, 8 caractères minimum).
+- API : `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`. `/api/picks` et `/api/picks/history` répondent 401 sans session.
+- Sécurité : mots de passe hachés (PBKDF2-SHA256 + sel), session dans un cookie HttpOnly de 30 jours, blocage 15 min après 5 échecs, 10 créations de compte par heure et par IP.
+- Les comptes sont stockés dans le KV `CACHE` (sans expiration). Sans KV (local), ils sont perdus au redémarrage.

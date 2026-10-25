@@ -188,4 +188,4 @@ export interface NotificationItem {
   matchTitle: string;
 }
 
-export type MainNavTab = 'tous' | 'direct' | 'favoris' | 'actualites' | 'classements';
+export type MainNavTab = 'tous' | 'direct' | 'favoris' | 'actualites' | 'classements' | 'pronostics';

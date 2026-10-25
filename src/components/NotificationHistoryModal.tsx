@@ -32,7 +32,7 @@ export const NotificationHistoryModal: React.FC<NotificationHistoryModalProps> =
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
-            <Bell className="w-5 h-5 text-red-600" />
+            <Bell className="w-5 h-5 text-accent-600" />
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
               Historique des alertes ({notifications.length})
             </h2>
@@ -51,14 +51,14 @@ export const NotificationHistoryModal: React.FC<NotificationHistoryModalProps> =
           <div className="flex items-center justify-between px-5 py-2 bg-slate-50 dark:bg-slate-950/40 border-b border-slate-100 dark:border-slate-800 text-xs">
             <button
               onClick={onMarkAllAsRead}
-              className="flex items-center gap-1 text-slate-600 dark:text-slate-300 hover:text-red-600"
+              className="flex items-center gap-1 text-slate-600 dark:text-slate-300 hover:text-accent-600"
             >
               <CheckCheck className="w-3.5 h-3.5" />
               <span>Tout marquer comme lu</span>
             </button>
             <button
               onClick={onClearAll}
-              className="flex items-center gap-1 text-slate-400 hover:text-red-500"
+              className="flex items-center gap-1 text-slate-400 hover:text-accent-500"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Effacer</span>
@@ -90,7 +90,7 @@ export const NotificationHistoryModal: React.FC<NotificationHistoryModalProps> =
                 }}
                 className="py-3 px-2 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg cursor-pointer transition-colors"
               >
-                <div className="p-2 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 shrink-0 mt-0.5">
+                <div className="p-2 rounded-xl bg-accent-50 dark:bg-accent-950/40 text-accent-600 shrink-0 mt-0.5">
                   <span className="text-sm font-bold">
                     {item.type === 'GOAL' ? '⚽' : item.type === 'RED_CARD' ? '🟥' : '⏱️'}
                   </span>
@@ -120,7 +120,7 @@ export const NotificationHistoryModal: React.FC<NotificationHistoryModalProps> =
                     if (item.type === 'GOAL') soundManager.playGoalSound();
                     else soundManager.playWhistle();
                   }}
-                  className="p-1 text-slate-400 hover:text-red-600 self-center"
+                  className="p-1 text-slate-400 hover:text-accent-600 self-center"
                   title="Rejouer le son"
                 >
                   <Volume2 className="w-3.5 h-3.5" />

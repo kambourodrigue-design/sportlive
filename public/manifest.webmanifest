@@ -1,7 +1,7 @@
 {
-  "name": "FlashScore Next",
-  "short_name": "FS Next",
-  "description": "Scores de football en direct, alertes et pronostics IA.",
+  "name": "ScoreAfrica",
+  "short_name": "ScoreAfrica",
+  "description": "Résultats sportifs en direct, alertes et pronostics IA.",
   "lang": "fr",
   "start_url": "/",
   "scope": "/",
