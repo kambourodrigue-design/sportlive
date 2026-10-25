@@ -46,11 +46,14 @@ export default function App() {
       if (isDarkMode) {
         document.documentElement.classList.add('dark');
         localStorage.setItem('fs_theme', 'dark');
+        document.documentElement.style.colorScheme = 'dark';
       } else {
         document.documentElement.classList.remove('dark');
         localStorage.setItem('fs_theme', 'light');
+        document.documentElement.style.colorScheme = 'light';
       }
     } catch {}
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isDarkMode ? '#070b1b' : '#f4f7fd');
   }, [isDarkMode]);
 
   const toggleTheme = () => {
@@ -206,7 +209,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen fs-bg text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen fs-bg text-slate-900 dark:text-slate-100 flex flex-col font-sans">
       
       {/* Top App Bar */}
       <div className={route.name === 'match' || route.name === 'league' || route.name === 'team' ? 'hidden md:block md:sticky md:top-0 md:z-40' : 'contents'}>
@@ -269,6 +272,24 @@ export default function App() {
 
             <PicksTeaser loggedIn={Boolean(user)} onOpen={() => setActiveTab('pronostics')} />
 
+            {apiConfigured && !isTennis && dayLoading && displayMatches.length === 0 ? (
+              <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3 grid gap-3 lg:grid-cols-2" aria-hidden="true">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="rounded-2xl fs-card border overflow-hidden animate-pulse">
+                    <div className="h-10 bg-slate-200/50 dark:bg-white/5" />
+                    {[0, 1, 2].map((j) => (
+                      <div key={j} className="px-4 py-3 flex items-center gap-3">
+                        <div className="w-10 h-8 rounded bg-slate-200/50 dark:bg-white/5" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-3 w-2/3 rounded bg-slate-200/60 dark:bg-white/10" />
+                          <div className="h-3 w-1/2 rounded bg-slate-200/60 dark:bg-white/10" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ) : (
             <MatchList
               comingSoon={isTennis}
               leagues={displayLeagues}
@@ -280,6 +301,7 @@ export default function App() {
               onOpenLeagueStandings={(leagueId) => navigate(leagueUrl(leagueId))}
               activeFilter={activeFilter}
             />
+            )}
           </div>
         )}
 

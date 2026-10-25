@@ -19,11 +19,17 @@ function readDayCache(date: string, sport: SportId): Match[] | null {
 }
 
 function writeDayCache(date: string, sport: SportId, matches: Match[]) {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ sport, date, ts: Date.now(), matches }));
-  } catch {
-    /* quota dépassé : on ignore */
-  }
+  // En différé et plafonné : sérialiser plus de 1000 matchs bloquait l'affichage sur mobile
+  const save = () => {
+    try {
+      const keep = [...matches.filter((m) => m.isLive), ...matches.filter((m) => !m.isLive)].slice(0, 300);
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ sport, date, ts: Date.now(), matches: keep }));
+    } catch {
+      /* quota dépassé : on ignore */
+    }
+  };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(save, { timeout: 3000 });
+  else setTimeout(save, 500);
 }
 
 export function useDayFixtures(date: string, enabled: boolean, sport: SportId = 'football') {

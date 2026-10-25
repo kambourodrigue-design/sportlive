@@ -176,7 +176,7 @@
   background: linear-gradient(140deg, rgba(34, 211, 238, 0.95), rgba(124, 92, 255, 0.60) 55%, rgba(255, 255, 255, 0) 90%);
 }
 .fs-card-live { box-shadow: 0 0 30px -8px rgba(34, 211, 238, 0.55), 0 14px 40px -18px rgba(0, 0, 0, 0.6); }
-@media (prefers-reduced-motion: no-preference) {
+@media (prefers-reduced-motion: no-preference) and (min-width: 1024px) {
   .fs-card-spin::before {
     background: conic-gradient(from var(--fs-angle), rgba(34, 211, 238, 0) 0%, rgba(34, 211, 238, 0.95) 12%, rgba(52, 245, 165, 0.85) 24%, rgba(34, 211, 238, 0) 38%, rgba(124, 92, 255, 0.55) 70%, rgba(34, 211, 238, 0) 100%);
     animation: fs-spin 6s linear infinite;

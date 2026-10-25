@@ -43,6 +43,7 @@ Flux RSS gratuits de Maxifoot (`/api/news`, cache 15 min, `NEWS_CACHE_SECONDS` p
 - Pages championnat/équipe/match : routes `/api/league`, `/api/league/fixtures`, `/api/team`, `/api/fixture` (cache 10 min à 1 h). Certaines demandent un abonnement API-Football qui autorise la saison en cours.
 - Page match façon Flashscore : onglets Résumé, Stats, Compos, Stats joueurs, Face-à-face, Classement (routes `/api/fixture/players` et `/api/h2h`). Les pages championnat et équipe partagent la même présentation (en-tête mobile, onglets).
 - Historique des pronostics : chaque pronostic est vérifié après le match (score à 90 min, au plus toutes les 5 min + cron), badges Gagné/Perdu, taux global, 7 j, 30 j, forme et série. Rafraîchi toutes les 2 min côté site.
+- Performance : thème appliqué avant le premier affichage (script dans index.html), championnats affichés par pages de 12, cache du jour plafonné, polices non bloquantes.
 - Formulaire de contact : `/api/contact` ; les messages se lisent dans `/admin` (section « Messages de contact »).
 
 ## Comptes et section Pronostics IA

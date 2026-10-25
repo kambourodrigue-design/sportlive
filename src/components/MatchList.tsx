@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Star, Trophy } from 'lucide-react';
 import { League, Match } from '../types';
 import { MatchRow } from './MatchRow';
 import { Link, leagueUrl } from '../router';
+
+const PAGE_SIZE = 12; // championnats affichés d'abord : évite de construire 1000+ lignes d'un coup
 
 interface MatchListProps {
   leagues: League[];
@@ -29,6 +31,12 @@ export const MatchList: React.FC<MatchListProps> = ({
   onlyFavorites = false,
   comingSoon = false,
 }) => {
+  const [collapsedLeagues, setCollapsedLeagues] = useState<Record<string, boolean>>({});
+  const [visibleLeagues, setVisibleLeagues] = useState(PAGE_SIZE);
+
+  // Retour à la première page quand le filtre change
+  useEffect(() => setVisibleLeagues(PAGE_SIZE), [activeFilter, onlyFavorites]);
+
   if (comingSoon) {
     return (
       <div className="max-w-xl mx-auto px-4 py-16 text-center">
@@ -40,9 +48,6 @@ export const MatchList: React.FC<MatchListProps> = ({
       </div>
     );
   }
-
-  // Collapsed leagues state
-  const [collapsedLeagues, setCollapsedLeagues] = useState<Record<string, boolean>>({});
 
   const toggleCollapse = (leagueId: string) => {
     setCollapsedLeagues((prev) => ({
@@ -102,7 +107,7 @@ export const MatchList: React.FC<MatchListProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3 grid gap-3 lg:grid-cols-2 items-start">
-      {groupedLeagues.map(({ league, matches: leagueMatches, liveCount }, leagueIndex) => {
+      {groupedLeagues.slice(0, visibleLeagues).map(({ league, matches: leagueMatches, liveCount }, leagueIndex) => {
         const isCollapsed = collapsedLeagues[league.id];
 
         return (
@@ -203,6 +208,14 @@ export const MatchList: React.FC<MatchListProps> = ({
           </div>
         );
       })}
+      {groupedLeagues.length > visibleLeagues && (
+        <button
+          onClick={() => setVisibleLeagues((n) => n + PAGE_SIZE)}
+          className="lg:col-span-2 py-3 rounded-2xl fs-card border text-sm font-bold text-accent-600 dark:text-cyan-300"
+        >
+          Afficher plus de championnats ({groupedLeagues.length - visibleLeagues} restants)
+        </button>
+      )}
     </div>
   );
 };
