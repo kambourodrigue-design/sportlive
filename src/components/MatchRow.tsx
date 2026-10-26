@@ -1,8 +1,9 @@
 import React from 'react';
 import { Star, Bell, Activity } from 'lucide-react';
 import { Match } from '../types';
-import { Link, teamUrl } from '../router';
+import { Link, matchUrl, teamUrl } from '../router';
 import { Logo } from './Logo';
+import { ShareButton } from './ShareButton';
 import { teamLogoUrl } from '../services/football';
 
 interface MatchRowProps {
@@ -195,6 +196,16 @@ export const MatchRow: React.FC<MatchRowProps> = ({
             >
               <Bell className="w-3.5 h-3.5" />
             </button>
+          )}
+          {isReal && (
+            <ShareButton
+              direct
+              size="sm"
+              title={`${match.homeTeam.name} - ${match.awayTeam.name}`}
+              text={match.status === 'SCHEDULED' ? `${match.leagueName} à ${match.startTime}` : `${match.score.home}-${match.score.away} · ${match.leagueName}`}
+              path={matchUrl(match.id)}
+              className="flex"
+            />
           )}
           <button
             onClick={(e) => {

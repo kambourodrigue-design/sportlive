@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Sparkles, Clock } from 'lucide-react';
 import { fetchPicks, readCachedPicks, PicksResult } from '../services/picks';
 import { PicksHistory } from './PicksHistory';
+import { ShareButton } from './ShareButton';
 
 const formatKickoff = (iso: string) =>
   new Date(iso).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
@@ -96,11 +97,23 @@ export const AIPicks: React.FC<{ onAuthLost?: () => void; defaultHistoryOpen?: b
                 </div>
 
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{p.reasoning}</p>
-                {p.model && (
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                    Analysé par {p.model === 'claude' ? 'Claude' : 'DeepSeek'}
-                  </p>
-                )}
+                <div className="flex items-center justify-between gap-2">
+                  {p.model ? (
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                      Analysé par {p.model === 'claude' ? 'Claude' : 'DeepSeek'}
+                    </p>
+                  ) : (
+                    <span />
+                  )}
+                  <ShareButton
+                    variant="pill"
+                    size="sm"
+                    align="right"
+                    title={`${p.home} vs ${p.away}`}
+                    text={`Pronostic IA : ${p.market} (confiance ${p.confidence}%)`}
+                    path={`/match/apif-${p.fixtureId}`}
+                  />
+                </div>
               </article>
             ))}
           </div>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from '../router';
+import { ShareButton } from './ShareButton';
 
 const GROUPS = [
   {
@@ -30,6 +31,16 @@ export const Footer: React.FC = () => (
         <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400 max-w-sm">
           Résultats en direct du football, du basket et du tennis, avec une couverture dédiée aux championnats africains, des classements et des pronostics IA.
         </p>
+        <ShareButton
+          className="mt-3"
+          variant="pill"
+          align="left"
+          up
+          label="Partager ScoreAfrica"
+          title="ScoreAfrica"
+          text="Scores en direct, classements et pronostics, avec les championnats africains"
+          path="/"
+        />
       </div>
       {GROUPS.map((g) => (
         <nav key={g.title} aria-label={g.title}>

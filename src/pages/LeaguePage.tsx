@@ -4,6 +4,7 @@ import { ALL_COMPETITIONS, STANDINGS_DATA, TOP_SCORERS_DATA } from '../data/mock
 import { Match } from '../types';
 import { Link, goBack, teamUrl } from '../router';
 import { Logo } from '../components/Logo';
+import { ShareButton } from '../components/ShareButton';
 import { PageHeader, TabBar } from '../components/DetailChrome';
 import { FixtureList } from '../components/FixtureList';
 import { StandingsTable, buildRows, Scope } from '../components/StandingsTable';
@@ -148,6 +149,7 @@ export const LeaguePage: React.FC<LeaguePageProps> = ({ routeId, apiConfigured, 
               {(data?.season || african?.season) && <> · Saison {data?.season ?? african?.season}</>}
             </p>
           </div>
+          <ShareButton className="hidden md:block ml-auto shrink-0" variant="pill" title={name} text="Résultats, classement et buteurs sur ScoreAfrica" />
         </header>
 
         <TabBar tabs={tabs} active={tab} onChange={setTab} />

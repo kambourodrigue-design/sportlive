@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Clock, Eye, ChevronRight } from 'lucide-react';
 import { Link, articleUrl } from '../router';
 import { NewsArticle } from '../types';
+import { ShareButton } from './ShareButton';
 
 interface NewsSectionProps {
   news: NewsArticle[];
@@ -61,6 +62,10 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
 
       {/* Featured Big News Item */}
       {featured && (
+        <div className="relative">
+        <div className="absolute top-3 right-3 z-10 rounded-full bg-black/45 backdrop-blur-sm [&_button]:text-white [&_button:hover]:bg-white/20">
+          <ShareButton title={featured.title} text={featured.summary || undefined} path={articleUrl(featured)} align="right" />
+        </div>
         <Link
           to={articleUrl(featured)}
           className="block group relative rounded-2xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm cursor-pointer hover:shadow-md transition-all"
@@ -112,15 +117,19 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
             </div>
           </div>
         </Link>
+        </div>
       )}
 
       {/* Secondary Articles Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {others.map((item) => (
+          <div key={item.id} className="relative">
+          <div className="absolute bottom-2 right-2 z-10">
+            <ShareButton size="sm" title={item.title} text={item.summary || undefined} path={articleUrl(item)} align="right" />
+          </div>
           <Link
-            key={item.id}
             to={articleUrl(item)}
-            className="group flex flex-col sm:flex-row gap-3.5 p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:shadow-md cursor-pointer transition-all"
+            className="group h-full flex flex-col sm:flex-row gap-3.5 p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:shadow-md cursor-pointer transition-all"
           >
             <div className="w-full sm:w-44 aspect-16/9 sm:aspect-auto rounded-lg overflow-hidden shrink-0 bg-slate-100 dark:bg-slate-800">
               <Visual article={item} className="w-full h-full min-h-[84px] object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -146,6 +155,7 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
               </div>
             </div>
           </Link>
+          </div>
         ))}
       </div>
 

@@ -3,6 +3,7 @@ import { ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
 import { NewsArticle } from '../types';
 import { Link, articleUrl, goBack } from '../router';
 import { PageHeader } from '../components/DetailChrome';
+import { ShareButton } from '../components/ShareButton';
 
 interface ArticlePageProps {
   routeId: string;
@@ -84,6 +85,7 @@ export const ArticlePage: React.FC<ArticlePageProps> = ({ routeId, news, loaded 
             <span className="font-semibold text-slate-700 dark:text-slate-300">{article.author}</span>
             {published && <> · {published}</>}
           </p>
+          <ShareButton className="mt-3" variant="pill" align="left" title={article.title} text={article.summary || undefined} />
         </div>
 
         {article.imageUrl && (
@@ -97,6 +99,11 @@ export const ArticlePage: React.FC<ArticlePageProps> = ({ routeId, news, loaded 
           {article.content.map((p, i) => (
             <p key={i}>{p}</p>
           ))}
+        </div>
+
+        <div className="px-4 sm:px-6 mt-6 pt-4 border-t border-slate-100 dark:border-white/5">
+          <p className="text-sm font-bold text-slate-900 dark:text-white mb-2">Cet article t'a plu ? Partage-le.</p>
+          <ShareButton variant="bar" align="left" label="Partager l'article" title={article.title} text={article.summary || undefined} />
         </div>
 
         {article.sourceUrl && (

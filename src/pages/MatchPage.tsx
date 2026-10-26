@@ -5,6 +5,7 @@ import { Link, goBack, leagueUrl, teamUrl } from '../router';
 import { useMatchDetail } from '../hooks/useMatchDetail';
 import { Logo } from '../components/Logo';
 import { PageHeader, SectionBand, TabBar } from '../components/DetailChrome';
+import { ShareButton } from '../components/ShareButton';
 import { FixtureList } from '../components/FixtureList';
 import { StandingsTable, buildRows } from '../components/StandingsTable';
 import { PitchTracker } from '../components/PitchTracker';
@@ -527,7 +528,14 @@ export const MatchPage: React.FC<MatchPageProps> = ({ routeId, matches, isFavori
         </Link>
 
         {/* Tableau d'affichage */}
-        <section aria-label="Score" className="px-3 sm:px-6 py-5 bg-gradient-to-b from-slate-100/70 to-transparent dark:from-white/[0.04]">
+        <section aria-label="Score" className="relative px-3 sm:px-6 py-5 bg-gradient-to-b from-slate-100/70 to-transparent dark:from-white/[0.04]">
+          <div className="hidden md:block absolute right-3 top-3 z-10">
+            <ShareButton
+              variant="pill"
+              title={showScore ? `${match.homeTeam.name} ${match.score.home}-${match.score.away} ${match.awayTeam.name}` : `${match.homeTeam.name} - ${match.awayTeam.name}`}
+              text={`${match.leagueName} sur ScoreAfrica`}
+            />
+          </div>
           <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2">
             <TeamBlock t={match.homeTeam} />
             <div className="flex flex-col items-center pt-1 min-w-[7.5rem]">

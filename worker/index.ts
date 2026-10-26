@@ -916,6 +916,35 @@ const IMPROVE_INSTRUCTIONS: Record<string, string> = {
   proofread: "Corrige uniquement l'orthographe, la grammaire et la ponctuation, sans changer le style ni le sens.",
 };
 
+// Quota quotidien d'API-Football pour l'administration. L'appel /status ne consomme aucune requête du quota.
+async function apiQuota(env: Env): Promise<Record<string, unknown>> {
+  if (!isConfigured(env)) return { configured: false };
+  const rapid = Boolean(env.RAPIDAPI_KEY);
+  const headers: Record<string, string> = rapid
+    ? { 'x-rapidapi-key': env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'api-football-v1.p.rapidapi.com' }
+    : { 'x-apisports-key': env.API_FOOTBALL_KEY! };
+  const now = new Date();
+  const resetsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString();
+  try {
+    const res = await fetch(`${rapid ? RAPID_URL : BASE_URL}/status`, { headers });
+    if (!res.ok) throw new Error(`API-Football error: ${res.status}`);
+    const body = (await res.json()) as { errors?: unknown; response?: any };
+    const used = Number(body.response?.requests?.current);
+    const limit = Number(body.response?.requests?.limit_day);
+    if (Number.isFinite(used) && Number.isFinite(limit) && limit > 0) {
+      return { configured: true, used, limit, remaining: Math.max(0, limit - used), plan: body.response?.subscription?.plan ?? null, resetsAt };
+    }
+    // Réponse sans compteur (clé refusée...) : on se rabat sur le dernier quota lu dans les en-têtes
+    if (lastQuota) {
+      return { configured: true, used: lastQuota.limit - lastQuota.remaining, limit: lastQuota.limit, remaining: lastQuota.remaining, plan: null, resetsAt };
+    }
+    const errs = body.errors && typeof body.errors === 'object' ? Object.values(body.errors as object).map(String).join(' ') : '';
+    return { configured: true, error: errs || "Quota indisponible pour le moment." };
+  } catch (err) {
+    return { configured: true, error: err instanceof Error ? err.message : 'Quota indisponible pour le moment.' };
+  }
+}
+
 async function handleAdmin(request: Request, env: Env, url: URL): Promise<Response> {
   if (!env.ADMIN_PASSWORD) {
     return json({ success: false, error: "ADMIN_PASSWORD n'est pas configuré dans Cloudflare (secret)." }, 503);
@@ -945,6 +974,9 @@ async function handleAdmin(request: Request, env: Env, url: URL): Promise<Respon
   if (path === '/api/admin/stats' && request.method === 'GET') {
     const d = parseInt(url.searchParams.get('days') || '30', 10);
     return json({ success: true, ...(await statsSummary(env, Math.min(90, Math.max(1, Number.isFinite(d) ? d : 30)))) });
+  }
+  if (path === '/api/admin/quota' && request.method === 'GET') {
+    return json({ success: true, ...(await apiQuota(env)) });
   }
   if (path === '/api/admin/messages' && request.method === 'GET') {
     return json({ success: true, items: await loadContacts(env) });

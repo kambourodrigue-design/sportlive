@@ -4,6 +4,7 @@ import { Match } from '../types';
 import { goBack } from '../router';
 import { Logo } from '../components/Logo';
 import { PageHeader, TabBar } from '../components/DetailChrome';
+import { ShareButton } from '../components/ShareButton';
 import { FixtureList } from '../components/FixtureList';
 import { TeamData, fetchTeam, teamLogoUrl } from '../services/football';
 
@@ -66,6 +67,7 @@ export const TeamPage: React.FC<TeamPageProps> = ({ routeId, apiConfigured, demo
               </p>
             )}
           </div>
+          <ShareButton className="hidden md:block ml-auto shrink-0" variant="pill" title={name} text="Résultats et calendrier sur ScoreAfrica" />
         </header>
 
         <TabBar tabs={[{ id: 'resultats' as const, label: 'Résultats' }, { id: 'calendrier' as const, label: 'Calendrier' }]} active={tab} onChange={setTab} />

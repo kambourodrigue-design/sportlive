@@ -69,3 +69,11 @@ Flux RSS gratuits de Maxifoot (`/api/news`, cache 15 min, `NEWS_CACHE_SECONDS` p
 - Collecte anonyme et sans cookie (`POST /api/hit`) : pages vues, visiteurs du jour (empreinte qui change chaque jour), pays, appareil, provenance. Rien n'est compté pour les robots, `/admin`, ni si le navigateur envoie « Ne pas me suivre ».
 - Tableau de bord en haut de la page `/admin` (7, 30 ou 90 jours). Les données sont conservées environ 3 mois.
 - Pour rester sous la limite d'écritures du KV gratuit (1000 par jour), les visites sont regroupées : une écriture au plus toutes les 2 minutes par instance (`STATS_FLUSH_SECONDS` pour changer). Sur un fort trafic, passer au plan payant de Workers.
+
+## Partage
+- Composant `src/components/ShareButton.tsx` : sur mobile, feuille de partage du téléphone ; sur ordinateur, menu WhatsApp / Facebook / X / Telegram / copier le lien.
+- Présent sur : en-tête mobile des pages détail, page match (score), championnat, équipe, articles (sous le titre et en fin d'article), cartes d'actualités, pronostics IA, lignes de match (au survol, matchs réels) et pied de page (partage du site).
+
+## Quota API (page /admin)
+- Carte « Quota API-Football » en haut de `/admin` : requêtes utilisées / limite du jour, barre verte, orange (≥ 70 %) puis rouge (≥ 90 %), compte à rebours avant la remise à zéro (00h00 UTC). Rafraîchie toutes les minutes.
+- Route `GET /api/admin/quota` (protégée) : interroge `/status` d'API-Football, qui ne consomme pas de requête du quota.

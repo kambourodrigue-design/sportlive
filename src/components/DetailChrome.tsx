@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Check, Share2, Star } from 'lucide-react';
+import React from 'react';
+import { ArrowLeft, Star } from 'lucide-react';
 import { goBack } from '../router';
+import { ShareButton } from './ShareButton';
 
 interface PageHeaderProps {
   sport?: string;
@@ -11,23 +12,6 @@ interface PageHeaderProps {
 
 // En-tête des pages de détail sur mobile (retour, sport, partage, favori) ; sur ordinateur la barre du site reste affichée
 export const PageHeader: React.FC<PageHeaderProps> = ({ sport = 'Football', favorite, onToggleFavorite, shareTitle }) => {
-  const [copied, setCopied] = useState(false);
-
-  const share = async () => {
-    const url = window.location.href;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: shareTitle, url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* partage annulé */
-    }
-  };
-
   return (
     <div className="md:hidden sticky top-0 z-40 fs-bar fs-bar-top border-b">
       <div className="h-14 px-2 flex items-center justify-between">
@@ -38,9 +22,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ sport = 'Football', favo
           <span className="text-lg font-extrabold text-slate-900 dark:text-white truncate">{sport}</span>
         </div>
         <div className="flex items-center">
-          <button onClick={share} className="p-2.5 rounded-lg text-slate-700 dark:text-slate-200" aria-label="Partager cette page">
-            {copied ? <Check className="w-6 h-6 text-emerald-500" /> : <Share2 className="w-6 h-6" />}
-          </button>
+          <ShareButton title={shareTitle} label="Partager cette page" align="right" />
           {onToggleFavorite && (
             <button
               onClick={onToggleFavorite}
@@ -53,11 +35,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ sport = 'Football', favo
           )}
         </div>
       </div>
-      {copied && (
-        <p role="status" className="absolute right-3 top-14 mt-1 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold shadow-lg">
-          Lien copié
-        </p>
-      )}
     </div>
   );
 };
