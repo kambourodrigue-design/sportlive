@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Clock, Flame, History, X } from 'lucide-react';
-import { fetchPicksHistory, HistoryEntry, HistoryStats } from '../services/picks';
+import { fetchPicksHistory, HistoryEntry, HistoryStats, VerifyInfo } from '../services/picks';
 
 const REFRESH_MS = 120000; // le taux se met à jour tout seul, comme les scores
 
@@ -50,7 +50,7 @@ const RateRing: React.FC<{ rate: number | null }> = ({ rate }) => {
 type Period = 'all' | '30' | '7';
 
 export const PicksHistory: React.FC<{ reloadKey?: string; defaultOpen?: boolean }> = ({ reloadKey, defaultOpen }) => {
-  const [data, setData] = useState<{ stats: HistoryStats; entries: HistoryEntry[]; updatedAt?: string } | null>(null);
+  const [data, setData] = useState<{ stats: HistoryStats; entries: HistoryEntry[]; updatedAt?: string; verify?: VerifyInfo } | null>(null);
   const [open, setOpen] = useState(Boolean(defaultOpen));
   const [period, setPeriod] = useState<Period>('all');
 
@@ -71,7 +71,8 @@ export const PicksHistory: React.FC<{ reloadKey?: string; defaultOpen?: boolean 
   }, [reloadKey]);
 
   if (!data || data.stats.total === 0) return null;
-  const { stats, entries } = data;
+  const { stats, entries, verify } = data;
+  const ago = verify?.lastCheck ? Math.max(0, Math.round((Date.now() - new Date(verify.lastCheck).getTime()) / 60000)) : null;
   const shown = period === 'all' ? { won: stats.won, lost: stats.lost, rate: stats.rate } : period === '30' ? stats.last30 ?? { won: 0, lost: 0, rate: null } : stats.last7 ?? { won: 0, lost: 0, rate: null };
   const settled = shown.won + shown.lost;
   const periods: [Period, string][] = [['all', 'Tout'], ['30', '30 jours'], ['7', '7 jours']];
@@ -136,6 +137,14 @@ export const PicksHistory: React.FC<{ reloadKey?: string; defaultOpen?: boolean 
             {stats.won} gagnés, {stats.lost} perdus, {stats.pending} en attente{stats.void > 0 ? `, ${stats.void} annulés` : ''}.
             Chaque pronostic est vérifié automatiquement après le match, sur le score à 90 minutes, et le taux se met à jour tout seul.
           </p>
+          {verify?.error && stats.pending > 0 && (
+            <p className="mt-2 px-3 py-2 rounded-lg bg-amber-500/10 text-[11px] text-amber-700 dark:text-amber-300" role="alert">
+              Vérification impossible pour le moment : {verify.error} Les pronostics restent « en attente » et seront vérifiés dès que les résultats seront accessibles.
+            </p>
+          )}
+          {!verify?.error && ago !== null && (
+            <p className="mt-1 text-[11px] text-slate-400">Dernière vérification des résultats : {ago < 1 ? "à l'instant" : ago < 60 ? `il y a ${ago} min` : `il y a ${Math.round(ago / 60)} h`}.</p>
+          )}
           {stats.byModel && stats.byModel.length > 0 && (
             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
               Par modèle : {stats.byModel.map((m) => `${m.model === 'claude' ? 'Claude' : 'DeepSeek'} ${m.rate}% (${m.won + m.lost} vérifiés)`).join(' · ')}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Clock, Eye, Share2, X, ChevronRight } from 'lucide-react';
+import { Clock, Eye, ChevronRight } from 'lucide-react';
+import { Link, articleUrl } from '../router';
 import { NewsArticle } from '../types';
 
 interface NewsSectionProps {
@@ -19,7 +20,6 @@ const Visual: React.FC<{ article: NewsArticle; className?: string }> = ({ articl
 
 export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
   const [activeCategory, setActiveCategory] = useState<string>('TOUS');
-  const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
 
   const categories = ['TOUS', 'FOOTBALL', 'MERCATO', 'EUROPE', 'AFRIQUE', 'BASKET', 'TENNIS', 'AUTRE'];
 
@@ -61,9 +61,9 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
 
       {/* Featured Big News Item */}
       {featured && (
-        <div
-          onClick={() => setSelectedArticle(featured)}
-          className="group relative rounded-2xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm cursor-pointer hover:shadow-md transition-all"
+        <Link
+          to={articleUrl(featured)}
+          className="block group relative rounded-2xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm cursor-pointer hover:shadow-md transition-all"
         >
           <div className="relative aspect-16/9 md:aspect-21/9 overflow-hidden bg-slate-100 dark:bg-slate-800">
             <Visual article={featured} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
@@ -111,15 +111,15 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
               </span>
             </div>
           </div>
-        </div>
+        </Link>
       )}
 
       {/* Secondary Articles Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {others.map((item) => (
-          <div
+          <Link
             key={item.id}
-            onClick={() => setSelectedArticle(item)}
+            to={articleUrl(item)}
             className="group flex flex-col sm:flex-row gap-3.5 p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:shadow-md cursor-pointer transition-all"
           >
             <div className="w-full sm:w-44 aspect-16/9 sm:aspect-auto rounded-lg overflow-hidden shrink-0 bg-slate-100 dark:bg-slate-800">
@@ -145,71 +145,9 @@ export const NewsSection: React.FC<NewsSectionProps> = ({ news, loaded }) => {
                 <span>{item.author}</span>
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
-
-      {/* Full Article Reader Modal */}
-      {selectedArticle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[90vh] flex flex-col">
-            
-            {/* Top Bar */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
-              <span className="text-xs font-bold text-accent-600 uppercase">
-                {selectedArticle.sourceName ?? 'Actualités'} · {selectedArticle.category}
-              </span>
-              <button
-                onClick={() => setSelectedArticle(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-5 overflow-y-auto space-y-4">
-              <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white leading-tight">
-                {selectedArticle.title}
-              </h1>
-
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedArticle.author}</span>
-                <span>·</span>
-                <span>{selectedArticle.timeAgo}</span>
-                {selectedArticle.views > 0 && (
-                  <>
-                    <span>·</span>
-                    <span>{selectedArticle.views.toLocaleString()} vues</span>
-                  </>
-                )}
-              </div>
-
-              <div className="rounded-xl overflow-hidden aspect-16/9 bg-slate-100">
-                <Visual article={selectedArticle} className="w-full h-full object-cover" />
-              </div>
-
-              <div className="space-y-3 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                {selectedArticle.content.map((paragraph, idx) => (
-                  <p key={idx}>{paragraph}</p>
-                ))}
-              </div>
-
-              {selectedArticle.sourceUrl && (
-                <a
-                  href={selectedArticle.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center w-full px-4 py-2.5 rounded-xl text-sm font-bold text-white fs-logo hover:brightness-110 transition"
-                >
-                  Lire l'article complet sur {selectedArticle.sourceName ?? 'le site source'}
-                </a>
-              )}
-            </div>
-
-          </div>
-        </div>
-      )}
 
     </div>
   );

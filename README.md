@@ -51,3 +51,21 @@ Flux RSS gratuits de Maxifoot (`/api/news`, cache 15 min, `NEWS_CACHE_SECONDS` p
 - API : `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`. `/api/picks` et `/api/picks/history` répondent 401 sans session.
 - Sécurité : mots de passe hachés (PBKDF2-SHA256 + sel), session dans un cookie HttpOnly de 30 jours, blocage 15 min après 5 échecs, 10 créations de compte par heure et par IP.
 - Les comptes sont stockés dans le KV `CACHE` (sans expiration). Sans KV (local), ils sont perdus au redémarrage.
+
+## Référencement (SEO)
+- Le Worker réécrit les balises (titre, description, aperçu de partage, adresse canonique, données structurées) de chaque page : accueil, match, équipe, championnat, article de la rédaction, pages légales. WhatsApp et Facebook affichent ainsi un aperçu propre.
+- `/sitemap.xml` et `/robots.txt` sont générés automatiquement avec l'adresse du site (le domaine personnalisé sera pris en compte tout seul).
+- Les actualités reprises d'un flux externe sont en `noindex` : seuls tes articles (page /admin) sont proposés à Google.
+- Une fois le domaine branché : ajouter le site dans Google Search Console et envoyer `https://ton-domaine/sitemap.xml`.
+- Pages articles : `/actualites/own-<id>/<titre>`.
+
+## Alertes de but (Web Push)
+- Chaque visiteur peut activer « Alertes de but, même site fermé » (onglet Favoris ou réglages des alertes). Seuls les matchs réels favoris (`apif-…`) sont suivis.
+- Une tâche planifiée (`*/2 * * * *`, dans `wrangler.jsonc`) lit les matchs en direct (même cache que le site) et envoie une notification par but. Elle ne fait aucun appel API s'il n'y a pas de match favori en cours (fenêtre : 10 min avant le coup d'envoi à 3 h 30 après).
+- Les clés VAPID sont créées automatiquement au premier usage et gardées dans le KV : rien à configurer. Les abonnements sont aussi dans le KV (4000 maximum).
+- iPhone : il faut ajouter le site à l'écran d'accueil. Les notifications arrivent avec 0 à 4 minutes de retard (cache + cron).
+
+## Statistiques de visites
+- Collecte anonyme et sans cookie (`POST /api/hit`) : pages vues, visiteurs du jour (empreinte qui change chaque jour), pays, appareil, provenance. Rien n'est compté pour les robots, `/admin`, ni si le navigateur envoie « Ne pas me suivre ».
+- Tableau de bord en haut de la page `/admin` (7, 30 ou 90 jours). Les données sont conservées environ 3 mois.
+- Pour rester sous la limite d'écritures du KV gratuit (1000 par jour), les visites sont regroupées : une écriture au plus toutes les 2 minutes par instance (`STATS_FLUSH_SECONDS` pour changer). Sur un fort trafic, passer au plan payant de Workers.

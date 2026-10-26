@@ -159,7 +159,9 @@ export const PAGES: Record<string, PageDef> = {
             "Compte : adresse e-mail, prénom ou pseudo, et mot de passe. Le mot de passe est chiffré (haché avec sel) et n'est jamais stocké en clair.",
             'Messages de contact : nom, e-mail et contenu du message que tu nous envoies.',
             "Sécurité : ton adresse IP est utilisée de façon temporaire (sous forme d'empreinte) pour limiter les tentatives de connexion abusives et les envois en masse.",
-            'Préférences sur ton appareil : thème, favoris et réglages des alertes sont enregistrés dans ton navigateur et ne sont pas envoyés à nos serveurs.',
+            'Préférences sur ton appareil : thème, favoris et réglages des alertes sont enregistrés dans ton navigateur. Ils ne sont pas envoyés à nos serveurs, sauf si tu actives les alertes de but (voir ci-dessous).',
+            "Alertes de but (facultatives) : si tu les actives, nous enregistrons l'adresse technique de notification de ton appareil et la liste des matchs que tu suis, uniquement pour t'envoyer les alertes. Tu peux les désactiver à tout moment dans les réglages des alertes, ce qui supprime ces données.",
+            "Mesure d'audience : pour savoir combien de personnes utilisent le site, nous comptons les pages vues avec le pays, le type d'appareil et le site d'origine. Aucun cookie n'est utilisé et aucune adresse IP n'est conservée : le visiteur est représenté par une empreinte anonyme qui change chaque jour. Si ton navigateur envoie « Ne pas me suivre », rien n'est compté.",
           ]}
         />
         <H>Pourquoi nous les utilisons</H>
@@ -168,6 +170,8 @@ export const PAGES: Record<string, PageDef> = {
             "Créer et sécuriser ton compte, et donner accès aux pronostics IA.",
             'Répondre à tes messages.',
             'Protéger le site contre les abus.',
+            "T'envoyer les alertes de but que tu as demandées.",
+            'Mesurer et améliorer la fréquentation du site (statistiques anonymes).',
           ]}
         />
         <P>Nous ne vendons pas tes données personnelles.</P>
@@ -255,6 +259,12 @@ export const PAGES: Record<string, PageDef> = {
             'Thème clair ou sombre.',
             'Matchs et championnats favoris, réglages des alertes et historique des alertes.',
             'Copie temporaire de données (matchs, championnats africains, pronostics) pour accélérer l\'affichage.',
+          ]}
+        />
+        <H>Mesure d'audience</H>
+        <UL
+          items={[
+            "Les statistiques de visites n'utilisent aucun cookie et aucun identifiant stocké sur ton appareil.",
           ]}
         />
         <P>Ces informations restent sur ton appareil. Tu peux les effacer à tout moment depuis les réglages de ton navigateur.</P>

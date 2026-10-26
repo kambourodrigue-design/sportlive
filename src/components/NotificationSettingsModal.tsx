@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { NotificationSettings } from '../types';
 import { ApiFootballStatus } from '../services/apiFootball';
+import { PushCard } from './PushCard';
+import { usePush } from '../hooks/usePush';
 
 interface NotificationSettingsModalProps {
   isOpen: boolean;
@@ -22,6 +24,7 @@ interface NotificationSettingsModalProps {
   onUpdateSettings: (newSettings: NotificationSettings) => void;
   onTriggerTestAlert: () => void;
   apiStatus?: ApiFootballStatus;
+  push: ReturnType<typeof usePush>;
 }
 
 export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps> = ({
@@ -31,6 +34,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
   onUpdateSettings,
   onTriggerTestAlert,
   apiStatus,
+  push,
 }) => {
   const [browserPermState, setBrowserPermState] = useState<string>(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -111,6 +115,8 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
         {/* Body */}
         <div className="p-5 overflow-y-auto space-y-6">
           
+          <PushCard push={push} />
+
           {/* API-Football Status Card */}
           <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700">
             <div className="flex items-center justify-between">

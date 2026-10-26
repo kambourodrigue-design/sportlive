@@ -1,5 +1,8 @@
 // Worker Cloudflare : sert l'API (/api/*). Les fichiers du site (dist/) sont servis par Cloudflare Assets.
 import { isAfricanLeague } from '../src/utils/africa';
+import { PushSub, VapidKeys, generateVapidKeys, isValidSub, sendPush } from './push';
+import { DayStats, addHit, deviceOf, emptyDay, isBot, mergeDay, pageKey, refHost, summarize } from './stats';
+import { PageMeta, buildRobots, buildSitemap, renderPage, slugify } from './seo';
 
 type KV = {
   get(key: string): Promise<string | null>;
@@ -18,8 +21,10 @@ interface Env {
   AI_PRIMARY?: string; // 'deepseek' (défaut) ou 'claude' : modèle essayé en premier
   PICKS_CACHE_SECONDS?: string;
   NEWS_CACHE_SECONDS?: string;
+  STATS_FLUSH_SECONDS?: string; // regroupement des écritures de statistiques (120 par défaut)
   ADMIN_PASSWORD?: string; // mot de passe de la page /admin (rédaction maison)
   CACHE?: KV;
+  ASSETS?: { fetch(request: Request): Promise<Response> }; // fichiers du site (dist), pour réécrire les balises de chaque page
 }
 
 const BASE_URL = 'https://v3.football.api-sports.io';
@@ -329,10 +334,14 @@ interface HistoryEntry {
   confidence: number;
   result: 'pending' | 'won' | 'lost' | 'void';
   score?: string;
+  reason?: 'status' | 'timeout'; // pourquoi un pronostic est classé « annulé »
 }
 interface History {
   entries: HistoryEntry[];
   lastSettle: number;
+  lastCheck?: number; // dernière vérification effectuée
+  lastError?: string | null; // raison si l'API n'a pas répondu
+  reopened?: boolean;
 }
 
 const HISTORY_KEY = 'picks_history_v1';
@@ -399,36 +408,64 @@ function evaluateBet(bet: Bet, home: number, away: number): boolean {
   }
 }
 
-// Vérifie les résultats des matchs terminés : 1 seul appel API (ids groupés), au plus toutes les 10 min
+// Vérifie les résultats des matchs terminés. On interroge l'API par JOURNÉE (/fixtures?date=) : c'est la requête que le site
+// utilise déjà pour afficher les matchs, donc acceptée par tous les plans (la recherche par identifiants est refusée par certains).
+// Au plus toutes les 10 minutes, et seulement s'il y a des pronostics à vérifier.
+const SETTLE_EVERY_MS = 10 * 60e3;
+const SETTLE_MAX_DAYS = 14; // au-delà, on classe « annulé » (match introuvable)
+
 async function settleHistory(env: Env, h: History): Promise<History> {
   const now = Date.now();
-  const due = h.entries.filter((e) => e.result === 'pending' && new Date(e.kickoff).getTime() + 2.5 * 3600e3 < now);
-  if (due.length > 0 && now - h.lastSettle >= 5 * 60e3) {
-    h.lastSettle = now;
-    try {
-      const ids = due.slice(0, 20).map((e) => e.fixtureId).join('-');
-      const list = await callApi(env, `/fixtures?ids=${ids}`);
-      for (const f of list) {
-        const e = h.entries.find((x) => x.fixtureId === f.fixture?.id);
-        if (!e) continue;
-        const st = f.fixture?.status?.short;
-        if (['FT', 'AET', 'PEN'].includes(st)) {
-          const hg = f.score?.fulltime?.home ?? f.goals?.home; // score à 90 minutes
-          const ag = f.score?.fulltime?.away ?? f.goals?.away;
-          if (typeof hg === 'number' && typeof ag === 'number') {
-            e.score = `${hg}-${ag}`;
-            e.result = evaluateBet(e.bet, hg, ag) ? 'won' : 'lost';
-          }
-        } else if (['PST', 'CANC', 'ABD', 'AWD', 'WO'].includes(st)) {
-          e.result = 'void';
-        }
-      }
-    } catch {
-      /* on réessaiera */
+  // Les pronostics classés « annulé » faute de réponse de l'API (ancien fonctionnement) sont remis en vérification, une seule fois
+  if (!h.reopened) {
+    for (const e of h.entries) {
+      if (e.result === 'void' && !e.score && !e.reason && new Date(e.kickoff).getTime() > now - SETTLE_MAX_DAYS * 86400e3) e.result = 'pending';
     }
+    h.reopened = true;
+  }
+  const due = h.entries.filter((e) => e.result === 'pending' && new Date(e.kickoff).getTime() + 2.5 * 3600e3 < now);
+  if (due.length > 0 && now - h.lastSettle >= SETTLE_EVERY_MS) {
+    h.lastSettle = now;
+    const days = [...new Set(due.map((e) => isoDay(new Date(e.kickoff))))].sort().reverse().slice(0, 3); // les plus récentes d'abord
+    let error: string | null = null;
+    let answered = 0;
+    for (const day of days) {
+      try {
+        const { response, errors } = await callApiRaw(env, `/fixtures?date=${day}`);
+        if (errors && response.length === 0) {
+          error = errors;
+          break; // l'API refuse : inutile d'insister sur les autres jours
+        }
+        answered++;
+        for (const f of response) {
+          const e = h.entries.find((x) => x.fixtureId === f.fixture?.id && x.result === 'pending');
+          if (!e) continue;
+          const st = f.fixture?.status?.short;
+          if (['FT', 'AET', 'PEN'].includes(st)) {
+            const hg = f.score?.fulltime?.home ?? f.goals?.home; // score à 90 minutes
+            const ag = f.score?.fulltime?.away ?? f.goals?.away;
+            if (typeof hg === 'number' && typeof ag === 'number') {
+              e.score = `${hg}-${ag}`;
+              e.result = evaluateBet(e.bet, hg, ag) ? 'won' : 'lost';
+            }
+          } else if (['PST', 'CANC', 'ABD', 'AWD', 'WO'].includes(st)) {
+            e.result = 'void';
+            e.reason = 'status';
+          }
+        }
+      } catch (err) {
+        error = err instanceof Error ? err.message : 'Erreur API';
+      }
+    }
+    h.lastError = answered === 0 && error ? error : null;
+    if (h.lastError) h.lastSettle = now + 50 * 60e3; // l'API refuse ou ne répond pas : on ne réessaie que dans 1 h pour ne pas gaspiller le quota
+    h.lastCheck = now;
   }
   for (const e of h.entries) {
-    if (e.result === 'pending' && new Date(e.kickoff).getTime() + 5 * 86400e3 < now) e.result = 'void';
+    if (e.result === 'pending' && new Date(e.kickoff).getTime() + SETTLE_MAX_DAYS * 86400e3 < now) {
+      e.result = 'void';
+      e.reason = 'timeout';
+    }
   }
   await saveHistory(env, h);
   return h;
@@ -646,8 +683,18 @@ async function refreshPicks(env: Env): Promise<any[]> {
 }
 
 // Tâche planifiée (cron) : règle les résultats même sans visiteur, et prépare les pronostics du jour
+const PUSH_CRON = '*/2 * * * *'; // alertes de but : toutes les 2 minutes
+
 async function runCron(env: Env, cron: string): Promise<void> {
   if (!isConfigured(env)) return;
+  if (cron === PUSH_CRON) {
+    try {
+      await runPushCheck(env, Math.max(15, parseInt(env.LIVE_CACHE_SECONDS || '100', 10)));
+    } catch {
+      /* on réessaiera à la prochaine minute */
+    }
+    return;
+  }
   try {
     await settleHistory(env, await loadHistory(env));
   } catch {
@@ -895,6 +942,10 @@ async function handleAdmin(request: Request, env: Env, url: URL): Promise<Respon
     return json({ success: false, error: 'Session expirée, reconnecte-toi.' }, 401);
   }
 
+  if (path === '/api/admin/stats' && request.method === 'GET') {
+    const d = parseInt(url.searchParams.get('days') || '30', 10);
+    return json({ success: true, ...(await statsSummary(env, Math.min(90, Math.max(1, Number.isFinite(d) ? d : 30)))) });
+  }
   if (path === '/api/admin/messages' && request.method === 'GET') {
     return json({ success: true, items: await loadContacts(env) });
   }
@@ -1311,6 +1362,478 @@ async function handleContact(request: Request, env: Env): Promise<Response> {
   return json({ success: true });
 }
 
+
+
+
+// ---------------------------------------------------------------------------
+// Statistiques de visites (sans cookie, anonymes)
+// ---------------------------------------------------------------------------
+const STATS_TTL = 95 * 86400; // on garde ~3 mois
+const statsKey = (day: string) => `stats_day_${day}`;
+const statBuf = new Map<string, DayStats>();
+let statLastFlush = 0;
+
+// Le KV gratuit limite les écritures (1000 par jour) : on regroupe les visites et on écrit au plus toutes les 2 minutes par instance
+async function flushStats(env: Env): Promise<void> {
+  const batch = [...statBuf.entries()];
+  statBuf.clear();
+  statLastFlush = Date.now();
+  for (const [day, extra] of batch) {
+    try {
+      const raw = await kvRead(env, statsKey(day));
+      const base: DayStats = raw ? (JSON.parse(raw) as DayStats) : emptyDay();
+      await kvWrite(env, statsKey(day), JSON.stringify(mergeDay(base, extra)), STATS_TTL);
+    } catch {
+      /* statistiques non essentielles */
+    }
+  }
+}
+
+async function handleHit(request: Request, env: Env, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
+  const none = new Response(null, { status: 204 });
+  if (request.method !== 'POST') return none;
+  const ua = request.headers.get('user-agent') || '';
+  if (isBot(ua)) return none;
+  let body: any = {};
+  try {
+    body = JSON.parse((await request.text()).slice(0, 2000));
+  } catch {
+    return none;
+  }
+  const page = pageKey(body.path);
+  if (!page) return none;
+  const now = new Date();
+  const day = isoDay(now);
+  const ip = request.headers.get('cf-connecting-ip') || 'local';
+  const visitor = (await sha256Hex(`${ip}|${ua}|${day}|scoreafrica`)).slice(0, 10); // change chaque jour : impossible de suivre quelqu'un d'un jour à l'autre
+  const d = statBuf.get(day) ?? emptyDay();
+  addHit(d, {
+    page,
+    country: (request.headers.get('cf-ipcountry') || 'XX').toUpperCase().slice(0, 2),
+    device: deviceOf(ua),
+    ref: refHost(body.ref, new URL(request.url).hostname),
+    hour: now.getUTCHours(),
+    visitor,
+  });
+  statBuf.set(day, d);
+  const flushMs = Math.max(0, parseInt(env.STATS_FLUSH_SECONDS || '120', 10)) * 1000;
+  if (Date.now() - statLastFlush >= flushMs) {
+    const job = flushStats(env);
+    if (ctx) ctx.waitUntil(job);
+    else await job;
+  }
+  return none;
+}
+
+async function statsSummary(env: Env, days: number) {
+  const out: { date: string; stats: DayStats | null }[] = [];
+  const keys: string[] = [];
+  for (let i = days - 1; i >= 0; i--) keys.push(isoDay(new Date(Date.now() - i * 86400e3)));
+  const docs = await Promise.all(
+    keys.map(async (k) => {
+      try {
+        const raw = await kvRead(env, statsKey(k));
+        const doc: DayStats | null = raw ? (JSON.parse(raw) as DayStats) : null;
+        const pending = statBuf.get(k); // visites de cette instance pas encore écrites
+        return doc && pending ? mergeDay(doc, pending) : doc ?? (pending ? mergeDay(emptyDay(), pending) : null);
+      } catch {
+        return null;
+      }
+    }),
+  );
+  keys.forEach((k, i) => out.push({ date: k, stats: docs[i] }));
+  return summarize(out, docs[docs.length - 1]?.hours ?? Array(24).fill(0));
+}
+
+// ---------------------------------------------------------------------------
+// Alertes de but (Web Push) : fonctionnent même site fermé
+// ---------------------------------------------------------------------------
+const VAPID_KEY = 'vapid_v1';
+const PUSH_SUBS_KEY = 'push_subs_v1';
+const PUSH_STATE_KEY = 'push_state_v1';
+const MAX_PUSH_SUBS = 4000;
+const MAX_FAVS = 40;
+// On n'envoie qu'aux services de notification des navigateurs (évite qu'on nous fasse appeler une adresse quelconque)
+const PUSH_HOSTS = [/(^|\.)fcm\.googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)push\.apple\.com$/, /(^|\.)notify\.windows\.com$/];
+
+interface PushFav {
+  id: number; // identifiant API-Football du match
+  ko: string; // coup d'envoi (ISO) : on ne surveille un match que pendant sa fenêtre de jeu
+}
+interface PushRecord extends PushSub {
+  origin?: string; // adresse du site au moment de l'abonnement (sert de contact VAPID)
+  favs: PushFav[];
+  updatedAt: number;
+}
+
+let memVapid: VapidKeys | null = null;
+async function loadVapid(env: Env): Promise<VapidKeys> {
+  if (memVapid) return memVapid;
+  try {
+    const raw = await kvRead(env, VAPID_KEY);
+    if (raw) return (memVapid = JSON.parse(raw) as VapidKeys);
+  } catch {
+    /* on en génère une */
+  }
+  const keys = await generateVapidKeys(); // générées une seule fois puis gardées dans le KV : aucune configuration à faire
+  memVapid = keys;
+  try {
+    await kvWrite(env, VAPID_KEY, JSON.stringify(keys));
+  } catch {
+    /* non bloquant */
+  }
+  return keys;
+}
+
+async function loadPushSubs(env: Env): Promise<PushRecord[]> {
+  try {
+    const raw = await kvRead(env, PUSH_SUBS_KEY);
+    return raw ? (JSON.parse(raw) as PushRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
+const savePushSubs = (env: Env, subs: PushRecord[]) => kvWrite(env, PUSH_SUBS_KEY, JSON.stringify(subs));
+
+function cleanFavs(input: unknown): PushFav[] {
+  if (!Array.isArray(input)) return [];
+  const out: PushFav[] = [];
+  for (const f of input.slice(0, MAX_FAVS)) {
+    const id = Number(f?.id);
+    const ko = typeof f?.ko === 'string' ? f.ko : '';
+    if (Number.isInteger(id) && id > 0 && !Number.isNaN(new Date(ko).getTime())) out.push({ id, ko });
+  }
+  return out;
+}
+
+async function handlePush(request: Request, env: Env, url: URL): Promise<Response> {
+  if (url.pathname === '/api/push/key' && request.method === 'GET') {
+    return json({ success: true, publicKey: (await loadVapid(env)).publicKey });
+  }
+  if (request.method !== 'POST') return json({ success: false, error: 'Méthode non autorisée' }, 405);
+  let body: any;
+  try {
+    body = JSON.parse(await request.text());
+  } catch {
+    return json({ success: false, error: 'Requête invalide' }, 400);
+  }
+  const ip = request.headers.get('cf-connecting-ip') || 'local';
+  const rlKey = `push_ip_${await sha256Hex(ip)}`;
+  const n = Number((await cacheGet(env, rlKey, 3600)) ?? 0);
+  if (n >= 60) return json({ success: false, error: 'Trop de requêtes' }, 429);
+  await cacheSet(env, rlKey, n + 1, 3600);
+
+  const subs = await loadPushSubs(env);
+  if (url.pathname === '/api/push/unsubscribe') {
+    const endpoint = typeof body.endpoint === 'string' ? body.endpoint : '';
+    await savePushSubs(env, subs.filter((x) => x.endpoint !== endpoint));
+    return json({ success: true });
+  }
+  if (url.pathname === '/api/push/subscribe' || url.pathname === '/api/push/sync') {
+    const sub = body.subscription;
+    if (!isValidSub(sub) || !PUSH_HOSTS.some((re) => re.test(new URL(sub.endpoint).hostname))) {
+      return json({ success: false, error: 'Abonnement invalide' }, 400);
+    }
+    const favs = cleanFavs(body.favorites);
+    const i = subs.findIndex((x) => x.endpoint === sub.endpoint);
+    const rec: PushRecord = { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, origin: url.origin, favs, updatedAt: Date.now() };
+    if (i >= 0) subs[i] = rec;
+    else {
+      if (subs.length >= MAX_PUSH_SUBS) subs.shift(); // on retire le plus ancien plutôt que de refuser
+      subs.push(rec);
+    }
+    await savePushSubs(env, subs);
+    return json({ success: true, watching: favs.length });
+  }
+  return json({ success: false, error: 'Introuvable' }, 404);
+}
+
+// Appelé par la tâche planifiée toutes les 2 minutes : détecte les buts des matchs favoris et envoie les notifications
+async function runPushCheck(env: Env, liveTtl: number): Promise<number> {
+  if (!isConfigured(env)) return 0;
+  const subs = await loadPushSubs(env);
+  if (subs.length === 0) return 0;
+  const now = Date.now();
+  const watched = new Set<number>();
+  for (const s of subs) for (const f of s.favs) {
+    const ko = new Date(f.ko).getTime();
+    if (now >= ko - 10 * 60e3 && now <= ko + 3.5 * 3600e3) watched.add(f.id); // pas de match à surveiller = pas d'appel API
+  }
+  if (watched.size === 0) return 0;
+  if (lastQuota && lastQuota.remaining < 15) return 0; // on garde de quoi servir les visiteurs
+
+  const r = await cachedApi(env, 'fixtures_live_all_v2', '/fixtures?live=all', liveTtl, compactFixture);
+  const live = r.data as ReturnType<typeof compactFixture>[];
+  let state: Record<string, { h: number; a: number }> = {};
+  try {
+    const raw = await kvRead(env, PUSH_STATE_KEY);
+    if (raw) state = JSON.parse(raw);
+  } catch {
+    /* état vide : on repart de l'observation en cours, sans rien notifier */
+  }
+  const next: typeof state = {};
+  const alerts: { id: number; title: string; body: string; tag: string }[] = [];
+  for (const f of live) {
+    const id = f.fixture.id as number;
+    const h = f.goals.home, a = f.goals.away;
+    if (typeof h !== 'number' || typeof a !== 'number') continue;
+    next[id] = { h, a };
+    const prev = state[id];
+    if (!prev || !watched.has(id)) continue; // première observation : on note le score sans notifier
+    for (const side of ['home', 'away'] as const) {
+      const was = side === 'home' ? prev.h : prev.a;
+      const is = side === 'home' ? h : a;
+      if (is <= was) continue;
+      const team = f.teams[side];
+      const goals = (f.events || []).filter((e: any) => e.type === 'Goal' && e.detail !== 'Missed Penalty' && e.team?.id === (e.detail === 'Own Goal' ? f.teams[side === 'home' ? 'away' : 'home'].id : team.id));
+      const last = goals[goals.length - 1] as any;
+      const minute = last ? `${last.time?.elapsed ?? ''}${last.time?.extra ? `+${last.time.extra}` : ''}'` : `${f.fixture.status.elapsed ?? ''}'`;
+      const scorer = last?.player?.name ? `${last.player.name}${last.detail === 'Own Goal' ? ' (csc)' : ''}` : `But de ${team.name}`;
+      alerts.push({
+        id,
+        title: `⚽ BUT ! ${f.teams.home.name} ${h}-${a} ${f.teams.away.name}`,
+        body: `${minute} ${scorer}${last?.player?.name ? ` · ${team.name}` : ''}`,
+        tag: `goal-${id}-${h}-${a}`,
+      });
+    }
+  }
+  const changed = JSON.stringify(next) !== JSON.stringify(state);
+  if (changed) {
+    try {
+      await kvWrite(env, PUSH_STATE_KEY, JSON.stringify(next)); // écrit avant l'envoi : au plus une notification par but
+    } catch {
+      /* on retentera */
+    }
+  }
+  if (alerts.length === 0) return 0;
+
+  const vapid = await loadVapid(env);
+  const subject = subs.find((x) => x.origin)?.origin ?? 'https://scoreafrica.workers.dev';
+  const dead = new Set<string>();
+  let sent = 0;
+  const jobs: Promise<void>[] = [];
+  for (const al of alerts) {
+    for (const s of subs) {
+      if (!s.favs.some((f) => f.id === al.id)) continue;
+      jobs.push(
+        sendPush(s, { title: al.title, body: al.body, tag: al.tag, url: `/match/apif-${al.id}` }, vapid, subject, { ttl: 600 }).then((res) => {
+          if (res === 'ok') sent++;
+          else if (res === 'gone') dead.add(s.endpoint);
+        }),
+      );
+    }
+  }
+  await Promise.all(jobs);
+  if (dead.size) await savePushSubs(env, (await loadPushSubs(env)).filter((x) => !dead.has(x.endpoint)));
+  return sent;
+}
+
+// ---------------------------------------------------------------------------
+// Référencement : balises propres à chaque page, sitemap.xml, robots.txt
+// ---------------------------------------------------------------------------
+const FR_MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const frDate = (iso: string): string => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : `${d.getUTCDate()} ${FR_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+};
+
+const SEO_STATIC: Record<string, { title: string; description: string }> = {
+  'a-propos': { title: 'À propos de ScoreAfrica', description: 'ScoreAfrica : résultats sportifs en direct, championnats africains, classements et pronostics IA.' },
+  contact: { title: 'Contact', description: "Contacter l'équipe ScoreAfrica : question, suggestion, signalement d'erreur ou demande sur tes données." },
+  confidentialite: { title: 'Politique de confidentialité', description: 'Comment ScoreAfrica collecte, utilise et protège tes données personnelles.' },
+  conditions: { title: "Conditions d'utilisation", description: "Règles d'utilisation du site ScoreAfrica." },
+  cookies: { title: 'Politique de cookies', description: 'Les cookies et stockages locaux utilisés par ScoreAfrica.' },
+  'jeu-responsable': { title: 'Jeu responsable', description: 'Conseils pour garder le contrôle si tu paries sur le sport, et aide en cas de difficulté.' },
+};
+
+const articlePath = (a: { id: string; title: string }): string => `/actualites/own-${a.id}/${slugify(a.title)}`;
+
+async function fixtureForSeo(env: Env, id: number, liveTtl: number): Promise<ReturnType<typeof compactFixture> | null> {
+  if (!isConfigured(env)) return null;
+  const key = `fixture_v1_${id}`; // même clé que /api/fixture : pas d'appel API en plus si la page a déjà été ouverte
+  const hit = (await cacheGet(env, key, liveTtl)) as ReturnType<typeof compactFixture> | null;
+  if (hit) return hit;
+  try {
+    const { response } = await callApiRaw(env, `/fixtures?id=${id}`);
+    if (!response[0]) return null;
+    const compact = compactFixture(response[0]);
+    await cacheSet(env, key, compact, ['FT', 'AET', 'PEN'].includes(compact.fixture.status.short) ? 21600 : liveTtl);
+    return compact;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveMeta(env: Env, url: URL, liveTtl: number): Promise<PageMeta> {
+  const path = url.pathname.replace(/\/+$/, '') || '/';
+  const seg = path.split('/').filter(Boolean).map((x) => decodeURIComponent(x));
+  const generic = (title: string, description: string, extra: Partial<PageMeta> = {}): PageMeta => ({ title: `${title} | ScoreAfrica`, description, path, ...extra });
+
+  if (path === '/') {
+    return {
+      title: 'ScoreAfrica - Résultats Sportifs en Direct & Pronostics IA',
+      description: 'ScoreAfrica : résultats sportifs en direct, championnats africains, classements, actualités, alertes de buts et pronostics IA. Rapide, gratuit et optimisé pour mobile.',
+      path,
+      jsonLd: { '@context': 'https://schema.org', '@type': 'WebSite', name: 'ScoreAfrica', url: url.origin + '/', inLanguage: 'fr' },
+    };
+  }
+
+  if (seg.length === 1 && SEO_STATIC[seg[0]]) return generic(SEO_STATIC[seg[0]].title, SEO_STATIC[seg[0]].description);
+
+  if (seg[0] === 'match' && seg[1]) {
+    const m = /^apif-(\d+)$/.exec(seg[1]);
+    const f = m ? await fixtureForSeo(env, parseInt(m[1], 10), liveTtl) : null;
+    if (!f) return generic('Match en direct : score, stats et compositions', 'Score en direct, buts, statistiques, compositions et face-à-face sur ScoreAfrica.', { noindex: !m });
+    const home = f.teams.home.name;
+    const away = f.teams.away.name;
+    const st = f.fixture.status.short;
+    const done = ['FT', 'AET', 'PEN'].includes(st);
+    const live = ['1H', '2H', 'HT', 'ET', 'P', 'BT', 'LIVE'].includes(st);
+    const hasScore = typeof f.goals.home === 'number' && typeof f.goals.away === 'number';
+    const score = hasScore ? `${f.goals.home}-${f.goals.away}` : '';
+    const title = done
+      ? `${home} ${score} ${away} : résumé, stats et compos`
+      : live
+        ? `${home} ${score} ${away} en direct : score et stats`
+        : `${home} - ${away} : heure, compos et stats`;
+    const when = frDate(f.fixture.date);
+    const description = `${f.league.name}${f.league.country ? ` (${f.league.country})` : ''}${f.league.round ? `, ${f.league.round}` : ''} : ${home} - ${away}${when ? `, ${when}` : ''}. Score${live ? ' en direct' : ''}, buts, statistiques, compositions et face-à-face.`;
+    return {
+      title: `${title} | ScoreAfrica`,
+      description,
+      path,
+      heading: `${home} - ${away}`,
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'SportsEvent',
+        name: `${home} - ${away}`,
+        sport: 'Football',
+        startDate: f.fixture.date,
+        eventStatus: st === 'PST' ? 'https://schema.org/EventPostponed' : st === 'CANC' ? 'https://schema.org/EventCancelled' : 'https://schema.org/EventScheduled',
+        homeTeam: { '@type': 'SportsTeam', name: home },
+        awayTeam: { '@type': 'SportsTeam', name: away },
+        ...(f.fixture.venue?.name ? { location: { '@type': 'Place', name: f.fixture.venue.name } } : {}),
+      },
+    };
+  }
+
+  if (seg[0] === 'equipe' && seg[1]) {
+    const id = apiId(seg[1]);
+    let name = '';
+    let country = '';
+    if (id && isConfigured(env)) {
+      const key = `seo_team_${id}`;
+      const hit = (await cacheGet(env, key, 86400)) as { name: string; country: string } | null;
+      if (hit) ({ name, country } = hit);
+      else {
+        try {
+          const { response } = await callApiRaw(env, `/teams?id=${id}`);
+          name = response[0]?.team?.name || '';
+          country = response[0]?.team?.country || '';
+          if (name) await cacheSet(env, key, { name, country }, 86400);
+        } catch {
+          /* titre générique */
+        }
+      }
+    }
+    if (!name) return generic("Équipe : résultats et calendrier", "Derniers résultats, prochains matchs et informations de l'équipe sur ScoreAfrica.", { noindex: !id });
+    return {
+      title: `${name} : résultats, calendrier et infos | ScoreAfrica`,
+      description: `${name}${country ? ` (${country})` : ''} : derniers résultats, prochains matchs et informations du club sur ScoreAfrica.`,
+      path,
+      jsonLd: { '@context': 'https://schema.org', '@type': 'SportsTeam', name, sport: 'Football', ...(country ? { location: { '@type': 'Country', name: country } } : {}) },
+    };
+  }
+
+  if (seg[0] === 'championnat' && seg[1]) {
+    const id = apiId(seg[1]) ?? LEAGUE_ID_MAP[seg[1]] ?? null;
+    let name = '';
+    let country = '';
+    if (id && isConfigured(env)) {
+      const key = `seo_league_${id}`;
+      const hit = (await cacheGet(env, key, 86400)) as { name: string; country: string } | null;
+      if (hit) ({ name, country } = hit);
+      else {
+        try {
+          const { response } = await callApiRaw(env, `/leagues?id=${id}`);
+          name = response[0]?.league?.name || '';
+          country = response[0]?.country?.name || '';
+          if (name) await cacheSet(env, key, { name, country }, 86400);
+        } catch {
+          /* titre générique */
+        }
+      }
+    }
+    if (!name) return generic('Championnat : résultats, classement et buteurs', 'Résultats, calendrier, classement et meilleurs buteurs du championnat sur ScoreAfrica.', { noindex: !id });
+    const where = country && country !== 'World' ? ` (${country})` : '';
+    return {
+      title: `${name}${where} : résultats et classement | ScoreAfrica`,
+      description: `${name}${where} : résultats en direct, calendrier, classement et meilleurs buteurs sur ScoreAfrica.`,
+      path,
+    };
+  }
+
+  if (seg[0] === 'actualites' && seg[1]) {
+    const own = /^own-(.+)$/.exec(seg[1]);
+    const a = own ? (await loadArticles(env)).find((x) => x.id === own[1] && x.status === 'published') : null;
+    if (!a) return generic('Actualité football', 'Les actualités du football africain et mondial sur ScoreAfrica.', { noindex: true });
+    const canonical = articlePath(a);
+    return {
+      title: `${a.title} | ScoreAfrica`,
+      description: a.summary || a.content[0] || a.title,
+      path: canonical,
+      type: 'article',
+      image: a.imageUrl || undefined,
+      heading: a.title,
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'NewsArticle',
+        headline: a.title.slice(0, 110),
+        description: a.summary || undefined,
+        datePublished: a.publishedAt || a.createdAt,
+        dateModified: a.updatedAt,
+        author: { '@type': 'Organization', name: 'ScoreAfrica' },
+        publisher: { '@type': 'Organization', name: 'ScoreAfrica' },
+        mainEntityOfPage: url.origin + canonical,
+        ...(a.imageUrl ? { image: [a.imageUrl] } : {}),
+      },
+    };
+  }
+
+  return generic('Page introuvable', "Cette page n'existe pas ou a été déplacée.", { noindex: true });
+}
+
+async function servePage(request: Request, env: Env, url: URL, liveTtl: number): Promise<Response> {
+  const asset = await env.ASSETS!.fetch(new Request(new URL('/', url).toString(), { headers: request.headers }));
+  if (!asset.ok) return asset;
+  const html = await asset.text();
+  let body = html;
+  try {
+    body = renderPage(html, await resolveMeta(env, url, liveTtl), url.origin);
+  } catch {
+    /* en cas de souci, la page d'origine reste servie */
+  }
+  return new Response(request.method === 'HEAD' ? null : body, {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=60' },
+  });
+}
+
+async function sitemapXml(env: Env, origin: string): Promise<string> {
+  const entries: { path: string; lastmod?: string; priority?: string; changefreq?: string }[] = [{ path: '/', priority: '1.0', changefreq: 'hourly' }];
+  const ids = new Set<number>([...PICK_LEAGUE_IDS]);
+  const africa = (await cacheGet(env, 'leagues_africa_v1', 86400 * 7)) as { id: number }[] | null;
+  for (const l of africa ?? []) if (l?.id) ids.add(l.id);
+  for (const id of ids) entries.push({ path: `/championnat/${id}`, priority: '0.7', changefreq: 'daily' });
+  for (const a of (await loadArticles(env)).filter((x) => x.status === 'published').sort((x, y) => (y.publishedAt || '').localeCompare(x.publishedAt || '')).slice(0, 500)) {
+    entries.push({ path: articlePath(a), lastmod: a.updatedAt || a.publishedAt, priority: '0.8', changefreq: 'weekly' });
+  }
+  for (const slug of Object.keys(SEO_STATIC)) entries.push({ path: `/${slug}`, priority: '0.3', changefreq: 'yearly' });
+  return buildSitemap(origin, entries);
+}
+
+const SEO_PATH = /^\/(match|equipe|championnat|actualites)\/[^/]+(\/[^/]*)?\/?$/;
+
 export default {
   async scheduled(event: { cron: string }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
     ctx.waitUntil(runCron(env, event.cron));
@@ -1322,6 +1845,17 @@ export default {
     const liveTtl = Math.max(15, parseInt(env.LIVE_CACHE_SECONDS || '100', 10));
 
     try {
+      if (request.method === 'GET' || request.method === 'HEAD') {
+        if (url.pathname === '/robots.txt') {
+          return new Response(buildRobots(url.origin), { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
+        }
+        if (url.pathname === '/sitemap.xml') {
+          return new Response(await sitemapXml(env, url.origin), { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
+        }
+        const isPage = url.pathname === '/' || SEO_PATH.test(url.pathname) || (url.pathname.split('/').filter(Boolean).length === 1 && SEO_STATIC[url.pathname.slice(1).replace(/\/$/, '')]);
+        if (isPage && env.ASSETS) return await servePage(request, env, url, liveTtl);
+      }
+
       if (url.pathname === '/api/status') {
         return json({
           configured,
@@ -1377,6 +1911,10 @@ export default {
 
       if (url.pathname.startsWith('/api/auth/')) return await handleAuth(request, env, url);
 
+      if (url.pathname.startsWith('/api/push/')) return await handlePush(request, env, url);
+
+      if (url.pathname === '/api/hit') return await handleHit(request, env, ctx);
+
       // Pronostics IA : réservés aux comptes connectés
       if ((url.pathname === '/api/picks' || url.pathname === '/api/picks/history') && !(await getSessionUser(request, env))) {
         return json({ success: false, error: 'auth_required' }, 401);
@@ -1413,6 +1951,7 @@ export default {
         return json({
           success: true,
           updatedAt: new Date().toISOString(),
+          verify: { lastCheck: h.lastCheck ? new Date(h.lastCheck).toISOString() : null, error: h.lastError ?? null, apiConfigured: configured },
           stats: {
             total: h.entries.length,
             won,

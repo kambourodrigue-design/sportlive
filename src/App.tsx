@@ -9,9 +9,13 @@ import { SportSelectorModal } from './components/SportSelectorModal';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
 import { NotificationHistoryModal } from './components/NotificationHistoryModal';
 import { NewsSection } from './components/NewsSection';
+import { ArticlePage } from './pages/ArticlePage';
 import { StandingsSection } from './components/StandingsSection';
 import { SearchModal } from './components/SearchModal';
 import { LiveToast } from './components/LiveToast';
+import { trackPageView } from './services/analytics';
+import { PushCard } from './components/PushCard';
+import { usePush } from './hooks/usePush';
 import { PronosticsSection, PicksTeaser } from './components/PronosticsSection';
 import { AuthModal, AuthMode } from './components/AuthModal';
 import { useAuth } from './hooks/useAuth';
@@ -125,10 +129,15 @@ export default function App() {
     };
   }, [apiConfigured]);
 
+  // Mesure d'audience : une page vue à chaque changement d'adresse
+  const currentPath = usePath();
+  useEffect(() => trackPageView(currentPath), [currentPath]);
+
   // Titre de l'onglet selon la page
   useEffect(() => {
     const base = 'ScoreAfrica - Résultats Sportifs en Direct & Pronostics IA';
     if (route.name === 'home') document.title = base;
+    else if (route.name === 'article') { /* le titre est géré par la page de l'article */ }
     else if (route.name === 'page') document.title = `${PAGES[route.slug].title} - ScoreAfrica`;
     else if (route.name === 'notfound') document.title = 'Page introuvable - ScoreAfrica';
   }, [route]);
@@ -141,6 +150,8 @@ export default function App() {
   }, [apiConfigured, matches, dayMatches, activeSport, isFootball]);
 
   // Championnats inconnus du catalogue : on les crée à la volée pour que leurs matchs s'affichent
+  const push = usePush(favoriteMatchIds, useMemo(() => [...matches, ...displayMatches], [matches, displayMatches]));
+
   const displayLeagues = useMemo<League[]>(() => {
     const known = new Set(leagues.map((l) => l.id));
     const extra: League[] = [];
@@ -212,7 +223,7 @@ export default function App() {
     <div className="min-h-screen fs-bg text-slate-900 dark:text-slate-100 flex flex-col font-sans">
       
       {/* Top App Bar */}
-      <div className={route.name === 'match' || route.name === 'league' || route.name === 'team' ? 'hidden md:block md:sticky md:top-0 md:z-40' : 'contents'}>
+      <div className={route.name === 'match' || route.name === 'league' || route.name === 'team' || route.name === 'article' ? 'hidden md:block md:sticky md:top-0 md:z-40' : 'contents'}>
       <Navbar
         sports={uiSports}
         activeSport={activeSport}
@@ -368,6 +379,11 @@ export default function App() {
                   Gérer les alertes
                 </button>
               </div>
+              {!push.subscribed && (
+                <div className="max-w-7xl mx-auto mt-3">
+                  <PushCard push={push} compact />
+                </div>
+              )}
             </div>
 
             <MatchList
@@ -415,6 +431,7 @@ export default function App() {
             onSimulateGoal={triggerGoalSimulation}
           />
         )}
+        {route.name === 'article' && <ArticlePage routeId={route.id} news={liveNews} loaded={newsLoaded} />}
         {route.name === 'page' && <StaticPage slug={route.slug} />}
         {route.name === 'notfound' && (
           <div className="max-w-xl mx-auto px-4 py-24 text-center">
@@ -432,7 +449,7 @@ export default function App() {
 
       {/* Fixed Bottom Navigation Bar (Matching Screenshots 2, 3, 4, 5) */}
       <BottomNavigation
-        activeTab={route.name === 'home' ? activeTab : null}
+        activeTab={route.name === 'home' ? activeTab : route.name === 'article' ? 'actualites' : null}
         onTabChange={(tab) => {
           setActiveTab(tab);
           if (route.name !== 'home') navigate('/');
@@ -457,6 +474,7 @@ export default function App() {
         onUpdateSettings={setNotificationSettings}
         onTriggerTestAlert={handleTestAlert}
         apiStatus={apiStatus}
+        push={push}
       />
 
       <NotificationHistoryModal

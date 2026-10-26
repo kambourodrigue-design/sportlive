@@ -5,12 +5,14 @@
   "compatibility_date": "2026-10-01",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    // Le Worker passe d'abord sur l'API et sur les pages à référencer (il réécrit leurs balises), le reste reste servi directement
+    "run_worker_first": ["/api/*", "/", "/match/*", "/equipe/*", "/championnat/*", "/actualites/*", "/a-propos", "/contact", "/confidentialite", "/conditions", "/cookies", "/jeu-responsable", "/sitemap.xml", "/robots.txt"]
   },
   // Cache partagé entre visiteurs (protège le quota API-Football) : KV existant sportlive-cache
-  // Tâches automatiques : résultats des pronostics (toutes les 30 min), génération des pronostics (7h et 13h UTC)
-  "triggers": { "crons": ["*/30 * * * *", "0 7,13 * * *"] },
+  // Tâches automatiques : résultats des pronostics (toutes les 30 min), génération des pronostics (7h et 13h UTC), alertes de but (toutes les 2 min)
+  "triggers": { "crons": ["*/30 * * * *", "0 7,13 * * *", "*/2 * * * *"] },
   "kv_namespaces": [{ "binding": "CACHE", "id": "650fea3483e14ac59346a5d40012ff6d" }],
   "vars": {
     // Les visiteurs actualisent toutes les 2 min : cache à 100 s pour qu'ils reçoivent toujours des données fraîches.

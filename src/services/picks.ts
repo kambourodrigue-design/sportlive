@@ -63,12 +63,19 @@ export interface HistoryEntry {
   confidence: number;
   result: 'pending' | 'won' | 'lost' | 'void';
   score?: string;
+  reason?: 'status' | 'timeout';
 }
 
 export interface PeriodStats {
   won: number;
   lost: number;
   rate: number | null;
+}
+
+export interface VerifyInfo {
+  lastCheck: string | null;
+  error: string | null;
+  apiConfigured: boolean;
 }
 
 export interface HistoryStats {
@@ -85,13 +92,13 @@ export interface HistoryStats {
   byModel?: { model: string; won: number; lost: number; rate: number | null }[];
 }
 
-export async function fetchPicksHistory(): Promise<{ stats: HistoryStats; entries: HistoryEntry[]; updatedAt?: string } | null> {
+export async function fetchPicksHistory(): Promise<{ stats: HistoryStats; entries: HistoryEntry[]; updatedAt?: string; verify?: VerifyInfo } | null> {
   try {
     const res = await fetch('/api/picks/history', { credentials: 'same-origin' });
     if (!res.ok) return null;
     const json = await res.json();
     if (!json.success) return null;
-    return { stats: json.stats, entries: Array.isArray(json.entries) ? json.entries : [], updatedAt: json.updatedAt };
+    return { stats: json.stats, entries: Array.isArray(json.entries) ? json.entries : [], updatedAt: json.updatedAt, verify: json.verify };
   } catch {
     return null;
   }

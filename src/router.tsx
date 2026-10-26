@@ -53,6 +53,7 @@ export type Route =
   | { name: 'league'; id: string }
   | { name: 'team'; id: string }
   | { name: 'match'; id: string }
+  | { name: 'article'; id: string }
   | { name: 'page'; slug: string }
   | { name: 'notfound' };
 
@@ -65,6 +66,7 @@ export function matchRoute(path: string): Route {
   if (seg[0] === 'championnat' && seg[1]) return { name: 'league', id: seg[1] };
   if (seg[0] === 'equipe' && seg[1]) return { name: 'team', id: seg[1] };
   if (seg[0] === 'match' && seg[1]) return { name: 'match', id: seg[1] };
+  if (seg[0] === 'actualites' && seg[1]) return { name: 'article', id: seg[1] };
   if (seg.length === 1 && (STATIC_SLUGS as readonly string[]).includes(seg[0])) return { name: 'page', slug: seg[0] };
   return { name: 'notfound' };
 }
@@ -72,3 +74,15 @@ export function matchRoute(path: string): Route {
 export const leagueUrl = (id: string | number) => `/championnat/${encodeURIComponent(String(id))}`;
 export const teamUrl = (id: string | number) => `/equipe/${encodeURIComponent(String(id))}`;
 export const matchUrl = (id: string) => `/match/${encodeURIComponent(id)}`;
+
+export const slugify = (s: string): string =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 70) || 'article';
+
+// Les articles de la rédaction (id « own-… ») ont une adresse avec le titre, utile pour Google ; les autres gardent l'identifiant seul
+export const articleUrl = (a: { id: string; title: string }) => `/actualites/${encodeURIComponent(a.id)}${a.id.startsWith('own-') ? `/${slugify(a.title)}` : ''}`;

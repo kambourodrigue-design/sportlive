@@ -50,3 +50,40 @@ self.addEventListener('fetch', (e) => {
     ),
   );
 });
+
+// Alertes de but (Web Push) : affichées même site fermé
+self.addEventListener('push', (e) => {
+  let d = {};
+  try {
+    d = e.data ? e.data.json() : {};
+  } catch (_) {
+    /* message vide */
+  }
+  e.waitUntil(
+    self.registration.showNotification(d.title || 'ScoreAfrica', {
+      body: d.body || '',
+      tag: d.tag || undefined,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url: d.url || '/' },
+      renotify: true,
+      vibrate: [120, 60, 120],
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ('focus' in c) {
+          if ('navigate' in c) c.navigate(url).catch(() => {});
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    }),
+  );
+});
