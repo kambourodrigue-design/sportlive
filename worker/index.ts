@@ -3,6 +3,8 @@ import { isAfricanLeague } from '../src/utils/africa';
 import { PushSub, VapidKeys, generateVapidKeys, isValidSub, sendPush } from './push';
 import { DayStats, addHit, deviceOf, emptyDay, isBot, mergeDay, pageKey, refHost, summarize } from './stats';
 import { PageMeta, buildRobots, buildSitemap, renderPage, slugify } from './seo';
+import type { Bet, OddsMap, PickConfig, ScoredBet, Tier } from './picksModel';
+import { apiProbs, betLabel, buildSystemPrompt, parseOdds, poissonLambdas, poissonProbs, scoreBets, shortlist } from './picksModel';
 
 type KV = {
   get(key: string): Promise<string | null>;
@@ -20,9 +22,19 @@ interface Env {
   DEEPSEEK_MODEL?: string;
   AI_PRIMARY?: string; // 'deepseek' (défaut) ou 'claude' : modèle essayé en premier
   PICKS_CACHE_SECONDS?: string;
+  PICKS_MIN_CONFIDENCE?: string; // confiance minimale en % (80 par défaut)
+  PICKS_MIN_ODDS?: string; // cote minimale (1.25 par défaut)
+  PICKS_MIN_EDGE?: string; // valeur minimale en % : probabilité × cote − 1 (2 par défaut)
+  PICKS_VALUE_MIN_CONFIDENCE?: string; // niveau « Valeur » : confiance minimale en % (65 par défaut)
+  PICKS_VALUE_MIN_ODDS?: string; // niveau « Valeur » : cote minimale (1.60 par défaut)
+  PICKS_VALUE_MIN_EDGE?: string; // niveau « Valeur » : valeur minimale en % (4 par défaut)
   NEWS_CACHE_SECONDS?: string;
   STATS_FLUSH_SECONDS?: string; // regroupement des écritures de statistiques (120 par défaut)
   ADMIN_PASSWORD?: string; // mot de passe de la page /admin (rédaction maison)
+  PAYMENT_LINK?: string; // lien de paiement (modifiable ensuite dans /admin > Abonnés). Sans lien : pas d'abonnement, pronostics ouverts aux comptes
+  PREMIUM_PRICE?: string; // prix de l'abonnement en FCFA (1000 par défaut, modifiable dans /admin)
+  PREMIUM_DAYS?: string; // durée d'un abonnement en jours (30 par défaut, modifiable dans /admin)
+  TRIAL_DAYS?: string; // essai gratuit en jours (5 par défaut)
   CACHE?: KV;
   ASSETS?: { fetch(request: Request): Promise<Response> }; // fichiers du site (dist), pour réécrire les balises de chaque page
 }
@@ -319,9 +331,6 @@ async function loadNews(): Promise<NewsItem[]> {
 // ---------------------------------------------------------------------------
 // Historique des pronostics + taux de réussite (stocké dans le KV)
 // ---------------------------------------------------------------------------
-const BETS = ['HOME_WIN', 'AWAY_WIN', 'DRAW', 'HOME_OR_DRAW', 'AWAY_OR_DRAW', 'OVER_1_5', 'OVER_2_5', 'UNDER_2_5', 'UNDER_3_5', 'BTTS_YES'] as const;
-type Bet = (typeof BETS)[number];
-
 interface HistoryEntry {
   fixtureId: number;
   kickoff: string;
@@ -332,6 +341,8 @@ interface HistoryEntry {
   model?: string;
   market: string;
   confidence: number;
+  odds?: number; // meilleure cote au moment du pronostic (pour le rendement)
+  tier?: Tier; // « Sûr » ou « Valeur »
   result: 'pending' | 'won' | 'lost' | 'void';
   score?: string;
   reason?: 'status' | 'timeout'; // pourquoi un pronostic est classé « annulé »
@@ -385,6 +396,8 @@ async function recordHistory(env: Env, picks: any[]): Promise<void> {
       model: p.model,
       market: p.market,
       confidence: p.confidence,
+      odds: typeof p.odds === 'number' ? p.odds : undefined,
+      tier: p.tier === 'safe' || p.tier === 'value' ? p.tier : undefined,
       result: 'pending',
     });
   }
@@ -476,8 +489,31 @@ async function settleHistory(env: Env, h: History): Promise<History> {
 // ---------------------------------------------------------------------------
 // Compétitions suivies : C1, C3, C4, Euro, Ligue des nations, CAN, CAF C1, qualifs Afrique, L1, PL, Bundesliga, Serie A, Liga
 const PICK_LEAGUE_IDS = new Set([2, 3, 848, 4, 5, 6, 12, 29, 39, 61, 78, 135, 140]);
-const MAX_CANDIDATES = 8; // = 8 appels « predictions » au maximum par rafraîchissement
-const MAX_PICKS = 3;
+const MAX_CANDIDATES = 10; // matchs analysés par rafraîchissement (1 appel « predictions » chacun)
+const MAX_ODDS_LOOKUPS = 6; // matchs pour lesquels on lit les cotes (1 appel chacun)
+const MAX_DEEP = 5; // matchs présélectionnés : blessés (1 appel chacun) et classement (en cache)
+const DEEP_MIN_QUOTA = 40; // sous ce quota restant, on saute les appels facultatifs (cotes, blessés, classement)
+
+function pickConfig(env: Env): PickConfig {
+  const f = (v: string | undefined, def: number, min: number, max: number) => {
+    const n = parseFloat(String(v ?? '').replace(',', '.'));
+    return Number.isFinite(n) && n >= min && n <= max ? n : def;
+  };
+  return {
+    safe: {
+      minConfidence: f(env.PICKS_MIN_CONFIDENCE, 80, 50, 95),
+      minOdds: f(env.PICKS_MIN_ODDS, 1.25, 1.05, 5),
+      minEdge: f(env.PICKS_MIN_EDGE, 2, 0, 30) / 100,
+    },
+    value: {
+      minConfidence: f(env.PICKS_VALUE_MIN_CONFIDENCE, 65, 40, 95),
+      minOdds: f(env.PICKS_VALUE_MIN_ODDS, 1.6, 1.1, 8),
+      minEdge: f(env.PICKS_VALUE_MIN_EDGE, 4, 0, 40) / 100,
+    },
+    maxSafe: 2,
+    maxValue: 2,
+  };
+}
 
 interface Candidate {
   fixtureId: number;
@@ -487,14 +523,18 @@ interface Candidate {
   away: string;
   percent: { home: number; draw: number; away: number };
   advice: string;
-  comparison: { form?: unknown; att?: unknown; def?: unknown; total?: unknown };
-  last5: { home?: string; away?: string };
+  form5?: { home?: string; away?: string };
+  comparison?: { form?: unknown; att?: unknown; def?: unknown; total?: unknown };
+  goalsAvg?: { home?: { for: unknown; against: unknown }; away?: { for: unknown; against: unknown } };
+  h2h?: string;
+  rank?: { home?: string; away?: string };
+  injuries?: { home: string[]; away: string[] };
+  options: ScoredBet[]; // paris présélectionnés (probabilité, cote, valeur)
 }
 
 interface AiPick {
   fixtureId: number;
   bet: string;
-  market: string;
   confidence: number;
   reasoning: string;
 }
@@ -502,7 +542,40 @@ interface AiPick {
 const pct = (v: unknown): number => parseInt(String(v ?? '0').replace('%', ''), 10) || 0;
 const isoDay = (d: Date): string => d.toISOString().substring(0, 10);
 
-async function loadCandidates(env: Env): Promise<Candidate[]> {
+// Bilan des confrontations récentes, du point de vue de l'équipe à domicile du match à venir
+function h2hSummary(list: any[] | undefined, homeId: number): string | undefined {
+  const rows = (list || []).slice(0, 6).filter((m) => typeof m?.goals?.home === 'number' && typeof m?.goals?.away === 'number');
+  if (rows.length === 0) return undefined;
+  let w = 0;
+  let d = 0;
+  let l = 0;
+  let goals = 0;
+  for (const m of rows) {
+    const mine = m.teams?.home?.id === homeId ? m.goals.home : m.goals.away;
+    const theirs = m.teams?.home?.id === homeId ? m.goals.away : m.goals.home;
+    goals += m.goals.home + m.goals.away;
+    if (mine > theirs) w++;
+    else if (mine === theirs) d++;
+    else l++;
+  }
+  return `${rows.length} derniers face-à-face : ${w}V ${d}N ${l}D pour l'équipe à domicile, ${(goals / rows.length).toFixed(1)} buts par match`;
+}
+
+function standingLine(data: unknown, teamId: number, where: 'home' | 'away'): string | undefined {
+  try {
+    const groups = (data as any[])?.[0]?.league?.standings as any[][] | undefined;
+    const row = (groups || []).flat().find((r: any) => r?.team?.id === teamId);
+    if (!row) return undefined;
+    const rec = row[where];
+    return `${row.rank}e, ${row.points} pts en ${row.all?.played} matchs, bilan ${where === 'home' ? 'à domicile' : 'à l\'extérieur'} ${rec?.win}V ${rec?.draw}N ${rec?.lose}D`;
+  } catch {
+    return undefined;
+  }
+}
+
+const quotaLow = () => Boolean(lastQuota && lastQuota.remaining < DEEP_MIN_QUOTA);
+
+async function loadCandidates(env: Env, cfg: PickConfig): Promise<Candidate[]> {
   const now = new Date();
   const days = [isoDay(now), isoDay(new Date(now.getTime() + 86400000))];
   let fixtures: any[] = [];
@@ -516,38 +589,99 @@ async function loadCandidates(env: Env): Promise<Candidate[]> {
           new Date(f.fixture.date).getTime() > now.getTime(),
       ),
     );
-    if (fixtures.length >= MAX_PICKS) break; // pas besoin d'un 2e appel
+    if (fixtures.length >= MAX_CANDIDATES) break;
   }
   fixtures = fixtures.filter((f, i, arr) => arr.findIndex((x) => x.fixture.id === f.fixture.id) === i); // pas de doublons
   fixtures.sort((a, b) => new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime());
   fixtures = fixtures.slice(0, MAX_CANDIDATES);
 
-  const settled = await Promise.allSettled(
-    fixtures.map(async (f): Promise<Candidate> => {
-      const [p] = await callApi(env, `/predictions?fixture=${f.fixture.id}`);
-      return {
-        fixtureId: f.fixture.id,
-        league: f.league?.name || 'Compétition',
-        kickoff: f.fixture.date,
-        home: f.teams?.home?.name || 'Équipe 1',
-        away: f.teams?.away?.name || 'Équipe 2',
-        percent: {
-          home: pct(p?.predictions?.percent?.home),
-          draw: pct(p?.predictions?.percent?.draw),
-          away: pct(p?.predictions?.percent?.away),
-        },
-        advice: p?.predictions?.advice || '',
-        comparison: {
-          form: p?.comparison?.form,
-          att: p?.comparison?.att,
-          def: p?.comparison?.def,
-          total: p?.comparison?.total,
-        },
-        last5: { home: p?.teams?.home?.last_5?.form, away: p?.teams?.away?.last_5?.form },
-      };
-    }),
-  );
-  return settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+  // 1) Prédictions d'API-Football : buts moyens, forme, face-à-face (tout est lu, rien n'est jeté)
+  const base = (
+    await Promise.allSettled(
+      fixtures.map(async (f) => {
+        const [p] = await callApi(env, `/predictions?fixture=${f.fixture.id}`);
+        const percent = { home: pct(p?.predictions?.percent?.home), draw: pct(p?.predictions?.percent?.draw), away: pct(p?.predictions?.percent?.away) };
+        const lam = poissonLambdas(p?.teams);
+        const c: Candidate & { _f: any; _api: ReturnType<typeof apiProbs>; _poisson: ReturnType<typeof poissonProbs> | null } = {
+          fixtureId: f.fixture.id,
+          league: f.league?.name || 'Compétition',
+          kickoff: f.fixture.date,
+          home: f.teams?.home?.name || 'Équipe 1',
+          away: f.teams?.away?.name || 'Équipe 2',
+          percent,
+          advice: p?.predictions?.advice || '',
+          form5: { home: p?.teams?.home?.last_5?.form, away: p?.teams?.away?.last_5?.form },
+          comparison: { form: p?.comparison?.form, att: p?.comparison?.att, def: p?.comparison?.def, total: p?.comparison?.total },
+          goalsAvg: {
+            home: { for: p?.teams?.home?.league?.goals?.for?.average?.home, against: p?.teams?.home?.league?.goals?.against?.average?.home },
+            away: { for: p?.teams?.away?.league?.goals?.for?.average?.away, against: p?.teams?.away?.league?.goals?.against?.average?.away },
+          },
+          h2h: h2hSummary(p?.h2h, f.teams?.home?.id),
+          options: [],
+          _f: f,
+          _api: apiProbs(percent),
+          _poisson: lam ? poissonProbs(lam.lh, lam.la) : null,
+        };
+        return c;
+      }),
+    )
+  ).flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+
+  // 2) Cotes : seulement pour les matchs les plus prometteurs d'après les probabilités sans cote (économise le quota)
+  const prelim = (c: (typeof base)[number]) => {
+    const sc = scoreBets({ home: c.home, away: c.away, api: c._api, poisson: c._poisson, odds: {} });
+    return Math.max(0, ...sc.filter((x) => x.bet !== 'DRAW' && x.bet !== 'AWAY_WIN').map((x) => x.prob));
+  };
+  const ranked = [...base].sort((a, b) => prelim(b) - prelim(a));
+  const oddsMaps = new Map<number, OddsMap>();
+  if (!quotaLow()) {
+    await Promise.allSettled(
+      ranked.slice(0, MAX_ODDS_LOOKUPS).map(async (c) => {
+        oddsMaps.set(c.fixtureId, parseOdds(await callApi(env, `/odds?fixture=${c.fixtureId}`)));
+      }),
+    );
+  }
+
+  // 3) Paris à valeur : probabilité fusionnée × meilleure cote
+  const shortlisted = ranked
+    .map((c) => {
+      const odds = oddsMaps.get(c.fixtureId) ?? {};
+      c.options = shortlist(scoreBets({ home: c.home, away: c.away, api: c._api, poisson: c._poisson, odds }), cfg);
+      return c;
+    })
+    .filter((c) => c.options.length > 0)
+    .sort((a, b) => b.options[0].edge! - a.options[0].edge!)
+    .slice(0, MAX_DEEP);
+
+  // 4) Contexte supplémentaire pour les finalistes : blessés et classement
+  if (!quotaLow()) {
+    await Promise.allSettled(
+      shortlisted.map(async (c) => {
+        const f = c._f;
+        const [inj, st] = await Promise.allSettled([
+          callApi(env, `/injuries?fixture=${c.fixtureId}`),
+          f.league?.id && f.league?.season
+            ? cachedApi(env, `standings_${f.league.id}_${f.league.season}`, `/standings?league=${f.league.id}&season=${f.league.season}`, 3600)
+            : Promise.resolve(null),
+        ]);
+        if (inj.status === 'fulfilled') {
+          const side = (id: number) =>
+            inj.value
+              .filter((x: any) => x?.team?.id === id)
+              .slice(0, 6)
+              .map((x: any) => `${x.player?.name ?? '?'} (${x.player?.reason || x.player?.type || 'absent'})`);
+          c.injuries = { home: side(f.teams?.home?.id), away: side(f.teams?.away?.id) };
+        }
+        if (st.status === 'fulfilled' && st.value) {
+          const data = (st.value as { data: unknown }).data;
+          c.rank = { home: standingLine(data, f.teams?.home?.id, 'home'), away: standingLine(data, f.teams?.away?.id, 'away') };
+        }
+      }),
+    );
+  }
+
+  // On n'envoie à l'IA que les champs utiles (pas les champs internes)
+  return shortlisted.map(({ _f, _api, _poisson, ...c }) => c);
 }
 
 type AiModelName = 'claude' | 'deepseek';
@@ -556,20 +690,39 @@ function hasAi(env: Env): boolean {
   return Boolean(env.ANTHROPIC_API_KEY || env.DEEPSEEK_API_KEY);
 }
 
-function aiSystemPrompt(): string {
-  return (
-    "Tu es un analyste football prudent et honnête. On te donne des matchs à venir avec des statistiques. " +
-    `Choisis au maximum ${MAX_PICKS} matchs où les données convergent le plus clairement (jamais plus que nécessaire : si peu de matchs sont fiables, n'en retiens que 1 ou 2). ` +
-    "Pour chacun, propose UN pari simple portant sur le résultat à 90 minutes. " +
-    "Le champ bet doit valoir EXACTEMENT l'une de ces valeurs : HOME_WIN, AWAY_WIN, DRAW, HOME_OR_DRAW, AWAY_OR_DRAW, OVER_1_5, OVER_2_5, UNDER_2_5, UNDER_3_5, BTTS_YES. " +
-    "Le champ market est le libellé lisible en français correspondant (ex. « Victoire de Paris SG », « Plus de 1,5 buts »). " +
-    "La confiance est un entier entre 0 et 100, calibré sur les données fournies, jamais au-dessus de 85. " +
-    "N'invente aucune statistique absente des données. Explique en français en 2 phrases courtes maximum. " +
-    'Réponds UNIQUEMENT avec du JSON : {"picks":[{"fixtureId":number,"bet":string,"market":string,"confidence":number,"reasoning":string}]}'
+// Données envoyées à l'IA : contexte du match + paris présélectionnés (probabilités et cotes déjà calculées par le modèle)
+function aiPayload(candidates: Candidate[]): string {
+  return JSON.stringify(
+    candidates.map((c) => ({
+      fixtureId: c.fixtureId,
+      league: c.league,
+      kickoff: c.kickoff,
+      home: c.home,
+      away: c.away,
+      apiAdvice: c.advice,
+      apiPercent: c.percent,
+      form5: c.form5,
+      goalsAvg: c.goalsAvg,
+      comparison: c.comparison,
+      h2h: c.h2h,
+      rank: c.rank,
+      injuries: c.injuries,
+      options: c.options.map((o) => ({
+        bet: o.bet,
+        tier: o.tier,
+        label: o.label,
+        probability: Math.round(o.prob * 100),
+        bestOdds: o.best,
+        medianOdds: o.median !== null ? Math.round(o.median * 100) / 100 : null,
+        edgePct: o.edge !== null ? Math.round(o.edge * 1000) / 10 : null,
+        bookmakers: o.books,
+        sources: o.sources,
+      })),
+    })),
   );
 }
 
-async function askClaude(env: Env, candidates: Candidate[]): Promise<string> {
+async function askClaude(env: Env, candidates: Candidate[], cfg: PickConfig): Promise<string> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -580,8 +733,8 @@ async function askClaude(env: Env, candidates: Candidate[]): Promise<string> {
     body: JSON.stringify({
       model: env.AI_MODEL || 'claude-haiku-5-5',
       max_tokens: 1200,
-      system: aiSystemPrompt(),
-      messages: [{ role: 'user', content: JSON.stringify(candidates) }],
+      system: buildSystemPrompt(cfg),
+      messages: [{ role: 'user', content: aiPayload(candidates) }],
     }),
   });
   if (!res.ok) throw new Error(`Anthropic API error: ${res.status}`);
@@ -589,7 +742,7 @@ async function askClaude(env: Env, candidates: Candidate[]): Promise<string> {
   return (body.content || []).filter((b) => b.type === 'text').map((b) => b.text || '').join('');
 }
 
-async function askDeepSeek(env: Env, candidates: Candidate[], modelId: string): Promise<string> {
+async function askDeepSeek(env: Env, candidates: Candidate[], modelId: string, cfg: PickConfig): Promise<string> {
   const res = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
@@ -598,8 +751,8 @@ async function askDeepSeek(env: Env, candidates: Candidate[], modelId: string): 
       max_tokens: 1200,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: aiSystemPrompt() },
-        { role: 'user', content: JSON.stringify(candidates) },
+        { role: 'system', content: buildSystemPrompt(cfg) },
+        { role: 'user', content: aiPayload(candidates) },
       ],
     }),
   });
@@ -617,21 +770,21 @@ function parseAiPicks(text: string): AiPick[] {
 
 // Essaie le modèle principal, puis bascule sur l'autre s'il est absent, en panne ou répond n'importe quoi.
 // Un modèle sans clé configurée est simplement ignoré.
-async function askAi(env: Env, candidates: Candidate[]): Promise<{ picks: AiPick[]; model: AiModelName }> {
+async function askAi(env: Env, candidates: Candidate[], cfg: PickConfig): Promise<{ picks: AiPick[]; model: AiModelName }> {
   const order: AiModelName[] = env.AI_PRIMARY === 'claude' ? ['claude', 'deepseek'] : ['deepseek', 'claude'];
   const available = order.filter((m) => (m === 'claude' ? env.ANTHROPIC_API_KEY : env.DEEPSEEK_API_KEY));
   let lastError: unknown = new Error('Aucun modèle IA configuré');
   for (const model of available) {
     try {
       if (model === 'claude') {
-        return { picks: parseAiPicks(await askClaude(env, candidates)), model };
+        return { picks: parseAiPicks(await askClaude(env, candidates, cfg)), model };
       }
       // DeepSeek : V4 Pro d'abord, V4 Flash en secours, avant de passer à Claude
       const ids = [env.DEEPSEEK_MODEL || 'deepseek-v4-pro', 'deepseek-v4-flash'].filter((id, i, arr) => arr.indexOf(id) === i);
       let dsError: unknown = new Error('DeepSeek indisponible');
       for (const id of ids) {
         try {
-          return { picks: parseAiPicks(await askDeepSeek(env, candidates, id)), model };
+          return { picks: parseAiPicks(await askDeepSeek(env, candidates, id, cfg)), model };
         } catch (err) {
           dsError = err;
         }
@@ -678,7 +831,8 @@ async function refreshPicks(env: Env): Promise<any[]> {
       }
     }
   }
-  await cacheSet(env, `picks_${isoDay(new Date())}`, picks, picks.length ? picksTtlSeconds(env) : 1800);
+  // Même « aucun pari » est gardé en cache aussi longtemps : relancer l'analyse coûte une vingtaine d'appels API
+  await cacheSet(env, `picks_${isoDay(new Date())}`, picks, picksTtlSeconds(env));
   return picks;
 }
 
@@ -711,30 +865,40 @@ async function runCron(env: Env, cron: string): Promise<void> {
 }
 
 async function buildPicks(env: Env): Promise<unknown[]> {
-  const candidates = await loadCandidates(env);
-  if (candidates.length === 0) return [];
-  const { picks: aiPicks, model } = await askAi(env, candidates);
+  const cfg = pickConfig(env);
+  const candidates = await loadCandidates(env, cfg);
+  if (candidates.length === 0) return []; // aucun pari assez probable avec une bonne cote : mieux vaut ne rien proposer
+  const { picks: aiPicks, model } = await askAi(env, candidates, cfg);
   const byId = new Map(candidates.map((c) => [c.fixtureId, c]));
-  return aiPicks
-    .filter((p) => byId.has(p.fixtureId) && (BETS as readonly string[]).includes(p.bet))
-    .map((p) => {
-      const c = byId.get(p.fixtureId)!;
-      return {
+  const used = new Set<number>();
+  const picks = aiPicks.flatMap((p) => {
+    const c = byId.get(p.fixtureId);
+    const opt = c?.options.find((o) => o.bet === p.bet);
+    if (!c || !opt || !opt.tier || used.has(c.fixtureId)) return []; // l'IA ne peut choisir que parmi les paris présélectionnés, un par match
+    // La confiance ne peut dépasser la probabilité calculée, et doit rester au-dessus du seuil du niveau
+    const confidence = Math.min(90, Math.round(Number(p.confidence) || 0), Math.round(opt.prob * 100));
+    if (confidence < cfg[opt.tier].minConfidence) return [];
+    used.add(c.fixtureId);
+    return [
+      {
         fixtureId: c.fixtureId,
         league: c.league,
         kickoff: c.kickoff,
         home: c.home,
         away: c.away,
         percent: c.percent,
-        bet: p.bet,
+        bet: opt.bet,
+        tier: opt.tier,
         model,
-        market: String(p.market || '').slice(0, 80),
-        confidence: Math.max(0, Math.min(85, Math.round(Number(p.confidence) || 0))),
+        market: betLabel(opt.bet, c.home, c.away),
+        odds: opt.best,
+        confidence,
         reasoning: String(p.reasoning || '').slice(0, 400),
-      };
-    })
-    .sort((a: any, b: any) => b.confidence - a.confidence)
-    .slice(0, MAX_PICKS);
+      },
+    ];
+  });
+  const take = (tier: Tier, n: number) => picks.filter((p) => p.tier === tier).sort((a, b) => b.confidence - a.confidence).slice(0, n);
+  return [...take('safe', cfg.maxSafe), ...take('value', cfg.maxValue)];
 }
 
 // ---------------------------------------------------------------------------
@@ -978,6 +1142,67 @@ async function handleAdmin(request: Request, env: Env, url: URL): Promise<Respon
   if (path === '/api/admin/quota' && request.method === 'GET') {
     return json({ success: true, ...(await apiQuota(env)) });
   }
+  // ----- Abonnés : liste, activation / retrait manuels, réglages du lien de paiement -----
+  if (path === '/api/admin/subscribers' && request.method === 'GET') {
+    const [subs, claims, settings] = await Promise.all([loadSubs(env), loadClaims(env), loadPaySettings(env)]);
+    const now = Date.now();
+    const items = Object.entries(subs)
+      .map(([email, e]) => ({
+        email,
+        name: e.name,
+        createdAt: e.createdAt,
+        trialEndsAt: e.trialEndsAt ?? null,
+        premiumUntil: e.premiumUntil ?? null,
+        status: statusOf(e, now),
+      }))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return json({ success: true, items, claims, settings, trialDays: trialDaysOf(env) });
+  }
+  if (path === '/api/admin/subscribers/grant' && request.method === 'POST') {
+    const body = await readJson(request).catch(() => ({}));
+    const email = cleanText(body.email, 254).toLowerCase();
+    const days = Math.floor(Number(body.days));
+    if (!EMAIL_RE.test(email)) return json({ success: false, error: 'Adresse e-mail invalide.' }, 400);
+    if (!Number.isFinite(days) || days < 1 || days > 3650) return json({ success: false, error: 'Durée invalide (1 à 3650 jours).' }, 400);
+    const user = await loadUser(env, email);
+    if (!user) return json({ success: false, error: 'Aucun compte avec cet e-mail.' }, 404);
+    user.premiumUntil = Math.max(Date.now(), user.premiumUntil ?? 0) + days * 86400e3; // s'ajoute à l'abonnement en cours
+    if (user.trialEndsAt === undefined) user.trialEndsAt = Date.now();
+    await kvWrite(env, await userKey(email), JSON.stringify(user));
+    await upsertSub(env, user);
+    await removeClaim(env, email);
+    return json({ success: true, premiumUntil: user.premiumUntil });
+  }
+  if (path === '/api/admin/subscribers/revoke' && request.method === 'POST') {
+    const body = await readJson(request).catch(() => ({}));
+    const email = cleanText(body.email, 254).toLowerCase();
+    const user = EMAIL_RE.test(email) ? await loadUser(env, email) : null;
+    if (!user) return json({ success: false, error: 'Aucun compte avec cet e-mail.' }, 404);
+    user.premiumUntil = 0;
+    user.trialEndsAt = Date.now(); // l'essai est aussi terminé
+    await kvWrite(env, await userKey(email), JSON.stringify(user));
+    await upsertSub(env, user);
+    return json({ success: true });
+  }
+  if (path === '/api/admin/subscribers/dismiss' && request.method === 'POST') {
+    const body = await readJson(request).catch(() => ({}));
+    await removeClaim(env, cleanText(body.email, 254).toLowerCase());
+    return json({ success: true });
+  }
+  if (path === '/api/admin/pay-settings' && request.method === 'POST') {
+    const body = await readJson(request).catch(() => ({}));
+    const raw = typeof body.link === 'string' ? body.link.trim() : '';
+    const link = cleanLink(raw);
+    if (raw && !link) return json({ success: false, error: 'Le lien doit commencer par https://' }, 400);
+    const price = Math.floor(Number(body.price));
+    const days = Math.floor(Number(body.days));
+    if (!(price >= 1 && price <= 10_000_000)) return json({ success: false, error: 'Prix invalide.' }, 400);
+    if (!(days >= 1 && days <= 3650)) return json({ success: false, error: 'Durée invalide (1 à 3650 jours).' }, 400);
+    const settings: PaySettings = { link, price, days };
+    await kvWrite(env, SETTINGS_KEY, JSON.stringify(settings));
+    settingsMemo = null;
+    return json({ success: true, settings });
+  }
   if (path === '/api/admin/messages' && request.method === 'GET') {
     return json({ success: true, items: await loadContacts(env) });
   }
@@ -1087,7 +1312,129 @@ interface UserRec {
   salt: string;
   hash: string;
   createdAt: string;
+  trialEndsAt?: number; // fin de l'essai gratuit (ms)
+  premiumUntil?: number; // fin de l'abonnement payé (ms)
 }
+
+// ---------- Abonnement : essai gratuit, puis paiement par lien et activation depuis /admin > Abonnés ----------
+const intEnv = (v: string | undefined, def: number, min = 1) => {
+  const n = parseInt(v ?? '', 10);
+  return Number.isFinite(n) && n >= min ? n : def;
+};
+const trialDaysOf = (env: Env) => intEnv(env.TRIAL_DAYS, 5, 0);
+
+interface PaySettings {
+  link: string;
+  price: number;
+  days: number;
+}
+const SETTINGS_KEY = 'pay_settings';
+let settingsMemo: { at: number; v: PaySettings } | null = null;
+
+// Lien accepté seulement en https (c'est un bouton affiché aux visiteurs)
+function cleanLink(v: unknown): string {
+  try {
+    const u = new URL(String(v ?? '').trim());
+    return u.protocol === 'https:' ? u.toString() : '';
+  } catch {
+    return '';
+  }
+}
+
+async function loadPaySettings(env: Env): Promise<PaySettings> {
+  if (settingsMemo && Date.now() - settingsMemo.at < 30000) return settingsMemo.v;
+  let saved: Partial<PaySettings> = {};
+  try {
+    const raw = await kvRead(env, SETTINGS_KEY);
+    if (raw) saved = JSON.parse(raw) as Partial<PaySettings>;
+  } catch {
+    /* réglages illisibles : valeurs par défaut */
+  }
+  const v: PaySettings = {
+    link: saved.link !== undefined ? cleanLink(saved.link) : cleanLink(env.PAYMENT_LINK),
+    price: Number.isFinite(saved.price) && saved.price! >= 1 ? saved.price! : intEnv(env.PREMIUM_PRICE, 1000),
+    days: Number.isFinite(saved.days) && saved.days! >= 1 ? saved.days! : intEnv(env.PREMIUM_DAYS, 30),
+  };
+  settingsMemo = { at: Date.now(), v };
+  return v;
+}
+
+interface Access {
+  status: 'trial' | 'premium' | 'expired';
+  until: number | null;
+  price: number;
+  days: number;
+  trialDays: number;
+  currency: string;
+  payments: boolean;
+  link: string;
+}
+
+// Index des comptes pour la section Abonnés (le KV ne sait pas lister sans lire chaque compte, ce qui dépasserait la limite d'appels).
+// Il est mis à jour à l'inscription, à la connexion et à chaque action de l'admin ; la fiche du compte reste la référence.
+interface SubEntry {
+  name: string;
+  createdAt: string;
+  trialEndsAt?: number;
+  premiumUntil?: number;
+}
+const SUBS_KEY = 'subs_index';
+const CLAIMS_KEY = 'pay_claims';
+
+async function loadSubs(env: Env): Promise<Record<string, SubEntry>> {
+  try {
+    const raw = await kvRead(env, SUBS_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, SubEntry>) : {};
+  } catch {
+    return {};
+  }
+}
+async function upsertSub(env: Env, user: UserRec): Promise<void> {
+  const subs = await loadSubs(env);
+  subs[user.email] = { name: user.name, createdAt: user.createdAt, trialEndsAt: user.trialEndsAt, premiumUntil: user.premiumUntil };
+  await kvWrite(env, SUBS_KEY, JSON.stringify(subs));
+}
+
+interface Claim {
+  email: string;
+  name: string;
+  note: string;
+  createdAt: string;
+}
+async function loadClaims(env: Env): Promise<Claim[]> {
+  try {
+    const raw = await kvRead(env, CLAIMS_KEY);
+    return raw ? (JSON.parse(raw) as Claim[]) : [];
+  } catch {
+    return [];
+  }
+}
+async function removeClaim(env: Env, email: string): Promise<void> {
+  const claims = await loadClaims(env);
+  if (claims.some((c) => c.email === email)) await kvWrite(env, CLAIMS_KEY, JSON.stringify(claims.filter((c) => c.email !== email)));
+}
+
+const statusOf = (e: { trialEndsAt?: number; premiumUntil?: number }, now: number): 'trial' | 'premium' | 'expired' =>
+  (e.premiumUntil ?? 0) > now ? 'premium' : (e.trialEndsAt ?? 0) > now ? 'trial' : 'expired';
+
+// Droit d'accès aux pronostics. L'essai démarre à la création du compte (ou à la première connexion pour les comptes existants).
+async function accessOf(env: Env, user: UserRec): Promise<Access> {
+  const s = await loadPaySettings(env);
+  const plan = { price: s.price, days: s.days, trialDays: trialDaysOf(env), currency: 'FCFA', payments: Boolean(s.link), link: s.link };
+  const now = Date.now();
+  if (user.trialEndsAt === undefined) {
+    user.trialEndsAt = now + plan.trialDays * 86400e3;
+    await kvWrite(env, await userKey(user.email), JSON.stringify(user)).catch(() => {});
+    await upsertSub(env, user).catch(() => {});
+  }
+  const status = statusOf(user, now);
+  if (status === 'premium') return { ...plan, status, until: user.premiumUntil! };
+  if (status === 'trial') return { ...plan, status, until: user.trialEndsAt };
+  // Sans lien de paiement configuré, on ne bloque personne (comportement d'avant l'abonnement)
+  if (!plan.payments) return { ...plan, status: 'premium', until: null };
+  return { ...plan, status: 'expired', until: user.trialEndsAt };
+}
+
 interface SessionRec {
   email: string;
   exp: number;
@@ -1144,7 +1491,7 @@ function readCookie(request: Request, name: string): string {
 }
 
 // Utilisateur connecté (null si pas de session valide)
-async function getSessionUser(request: Request, env: Env): Promise<{ name: string; email: string } | null> {
+async function getSessionUser(request: Request, env: Env): Promise<{ name: string; email: string; access: Access } | null> {
   const token = readCookie(request, SESSION_COOKIE);
   if (!/^[A-Za-z0-9_-]{40,60}$/.test(token)) return null;
   try {
@@ -1153,7 +1500,7 @@ async function getSessionUser(request: Request, env: Env): Promise<{ name: strin
     const sess = JSON.parse(raw) as SessionRec;
     if (!(sess.exp > Date.now())) return null;
     const user = await loadUser(env, sess.email);
-    return user ? { name: user.name, email: user.email } : null;
+    return user ? { name: user.name, email: user.email, access: await accessOf(env, user) } : null;
   } catch {
     return null;
   }
@@ -1169,11 +1516,12 @@ function jsonWithCookie(body: unknown, cookie: string, status = 200): Response {
   return res;
 }
 
-async function startSession(env: Env, user: { name: string; email: string }, secure: boolean): Promise<Response> {
+async function startSession(env: Env, user: UserRec, secure: boolean): Promise<Response> {
   const token = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const sess: SessionRec = { email: user.email, exp: Date.now() + SESSION_DAYS * 86400e3 };
   await kvWrite(env, `sess_${await sha256Hex(token)}`, JSON.stringify(sess), SESSION_DAYS * 86400);
-  return jsonWithCookie({ success: true, user: { name: user.name, email: user.email } }, sessionCookie(token, SESSION_DAYS * 86400, secure));
+  const access = await accessOf(env, user);
+  return jsonWithCookie({ success: true, user: { name: user.name, email: user.email, access } }, sessionCookie(token, SESSION_DAYS * 86400, secure));
 }
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/;
@@ -1211,8 +1559,16 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
 
     const name = cleanText(body.name, 40) || email.split('@')[0].slice(0, 40);
     const salt = crypto.getRandomValues(new Uint8Array(16));
-    const user: UserRec = { email, name, salt: toHex(salt), hash: await hashPassword(password, salt), createdAt: new Date().toISOString() };
+    const user: UserRec = {
+      email,
+      name,
+      salt: toHex(salt),
+      hash: await hashPassword(password, salt),
+      createdAt: new Date().toISOString(),
+      trialEndsAt: Date.now() + trialDaysOf(env) * 86400e3,
+    };
     await kvWrite(env, await userKey(email), JSON.stringify(user));
+    await upsertSub(env, user).catch(() => {});
     await cacheSet(env, regKey, regCount + 1, 3600);
     return startSession(env, user, secure);
   }
@@ -1232,9 +1588,33 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
       return json({ success: false, error: 'E-mail ou mot de passe incorrect.' }, 401);
     }
     await cacheSet(env, failKey, 0, 60);
+    if (user.trialEndsAt !== undefined) await upsertSub(env, user).catch(() => {}); // comptes créés avant la section Abonnés
     return startSession(env, user, secure);
   }
 
+  return json({ success: false, error: 'Not found' }, 404);
+}
+
+// ---------- Paiement par lien : demande d'activation « J'ai payé » ----------
+// Le lien de paiement ne permet pas de savoir qui a payé : le client signale son paiement, l'admin le voit dans /admin > Abonnés,
+// vérifie la réception de l'argent puis active le compte.
+async function handlePay(request: Request, env: Env, url: URL): Promise<Response> {
+  if (request.method !== 'POST') return json({ success: false, error: 'Méthode non autorisée' }, 405);
+  const sess = await getSessionUser(request, env);
+  if (!sess) return json({ success: false, error: 'auth_required' }, 401);
+
+  if (url.pathname === '/api/pay/claim') {
+    const rlKey = `claim_rl_${await sha256Hex(sess.email)}`;
+    const n = Number((await cacheGet(env, rlKey, 86400)) ?? 0);
+    if (n >= 5) return json({ success: false, error: "Tu as déjà envoyé plusieurs demandes aujourd'hui. Patiente, nous les traitons." }, 429);
+    await cacheSet(env, rlKey, n + 1, 86400);
+    const body = await readJson(request).catch(() => ({}));
+    const note = cleanText(body.note, 200);
+    const claims = (await loadClaims(env)).filter((c) => c.email !== sess.email);
+    claims.unshift({ email: sess.email, name: sess.name, note, createdAt: new Date().toISOString() });
+    await kvWrite(env, CLAIMS_KEY, JSON.stringify(claims.slice(0, 200)));
+    return json({ success: true });
+  }
   return json({ success: false, error: 'Not found' }, 404);
 }
 
@@ -1943,13 +2323,17 @@ export default {
 
       if (url.pathname.startsWith('/api/auth/')) return await handleAuth(request, env, url);
 
+      if (url.pathname.startsWith('/api/pay/')) return await handlePay(request, env, url);
+
       if (url.pathname.startsWith('/api/push/')) return await handlePush(request, env, url);
 
       if (url.pathname === '/api/hit') return await handleHit(request, env, ctx);
 
       // Pronostics IA : réservés aux comptes connectés
-      if ((url.pathname === '/api/picks' || url.pathname === '/api/picks/history') && !(await getSessionUser(request, env))) {
-        return json({ success: false, error: 'auth_required' }, 401);
+      if (url.pathname === '/api/picks' || url.pathname === '/api/picks/history') {
+        const me = await getSessionUser(request, env);
+        if (!me) return json({ success: false, error: 'auth_required' }, 401);
+        if (me.access.status === 'expired') return json({ success: false, error: 'subscription_required', access: me.access }, 402);
       }
 
       if (url.pathname === '/api/news') {
@@ -1995,6 +2379,28 @@ export default {
             last30: period(30),
             streak: settled.length ? { type: settled[0].result, count: streak } : null,
             form: settled.slice(0, 10).map((e) => e.result), // 10 derniers résultats, du plus récent au plus ancien
+            byTier: (['safe', 'value'] as const)
+              .map((t) => {
+                const mine = settled.filter((e) => e.tier === t);
+                const w = mine.filter((e) => e.result === 'won').length;
+                const priced = mine.filter((e) => typeof e.odds === 'number');
+                const profit = priced.reduce((sum, e) => sum + (e.result === 'won' ? e.odds! - 1 : -1), 0);
+                return {
+                  tier: t,
+                  won: w,
+                  lost: mine.length - w,
+                  rate: pct(w, mine.length - w),
+                  yieldPct: priced.length >= 5 ? Math.round((profit / priced.length) * 1000) / 10 : null,
+                };
+              })
+              .filter((x) => x.won + x.lost > 0),
+            yield: (() => {
+              // Rendement à mise égale : +1 × (cote − 1) si gagné, −1 si perdu. Seuls les pronostics enregistrés avec leur cote comptent.
+              const priced = settled.filter((e) => typeof e.odds === 'number');
+              if (priced.length < 5) return null;
+              const profit = priced.reduce((sum, e) => sum + (e.result === 'won' ? e.odds! - 1 : -1), 0);
+              return { bets: priced.length, percent: Math.round((profit / priced.length) * 1000) / 10 };
+            })(),
             byModel: (['claude', 'deepseek'] as const)
               .map((m) => {
                 const mine = h.entries.filter((e) => e.model === m);

@@ -6,13 +6,15 @@ export interface AiPick {
   away: string;
   percent: { home: number; draw: number; away: number };
   market: string;
+  odds?: number; // meilleure cote relevée
+  tier?: 'safe' | 'value'; // « Sûr » ou « Valeur »
   model?: string;
   confidence: number;
   reasoning: string;
 }
 
 export interface PicksResult {
-  state: 'ok' | 'empty' | 'demo' | 'no-ai' | 'error' | 'auth';
+  state: 'ok' | 'empty' | 'demo' | 'no-ai' | 'error' | 'auth' | 'subscription';
   picks: AiPick[];
 }
 
@@ -34,6 +36,7 @@ export async function fetchPicks(): Promise<PicksResult> {
   try {
     const res = await fetch('/api/picks', { credentials: 'same-origin' });
     if (res.status === 401) return { state: 'auth', picks: [] };
+    if (res.status === 402) return { state: 'subscription', picks: [] };
     if (!res.ok) throw new Error('picks unavailable');
     const json = await res.json();
     if (!json.success) return { state: 'error', picks: [] };
@@ -90,6 +93,8 @@ export interface HistoryStats {
   streak?: { type: 'won' | 'lost'; count: number } | null;
   form?: ('won' | 'lost')[];
   byModel?: { model: string; won: number; lost: number; rate: number | null }[];
+  yield?: { bets: number; percent: number } | null; // rendement à mise égale
+  byTier?: { tier: 'safe' | 'value'; won: number; lost: number; rate: number | null; yieldPct: number | null }[];
 }
 
 export async function fetchPicksHistory(): Promise<{ stats: HistoryStats; entries: HistoryEntry[]; updatedAt?: string; verify?: VerifyInfo } | null> {

@@ -31,5 +31,10 @@ export function useAuth() {
   // Session expirée côté serveur (réponse 401) : on repasse en « déconnecté »
   const sessionLost = useCallback(() => setUser(null), []);
 
-  return { user, checking, submit, signOut, sessionLost };
+  // Relit l'état du compte (essai, abonnement) auprès du serveur
+  const refresh = useCallback(async () => {
+    setUser(await fetchMe());
+  }, []);
+
+  return { user, checking, submit, signOut, sessionLost, refresh };
 }

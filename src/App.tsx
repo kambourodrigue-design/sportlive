@@ -72,7 +72,7 @@ export default function App() {
   const route = matchRoute(usePath());
 
   // Compte utilisateur (accès aux pronostics IA)
-  const { user, checking: authChecking, submit: submitAuth, signOut, sessionLost } = useAuth();
+  const { user, checking: authChecking, submit: submitAuth, signOut, sessionLost, refresh: refreshAuth } = useAuth();
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
 
   // Modal states
@@ -403,7 +403,7 @@ export default function App() {
 
         {/* TAB: PRONOSTICS IA (réservé aux comptes connectés) */}
         {activeTab === 'pronostics' && (
-          <PronosticsSection user={user} checking={authChecking} onOpenAuth={setAuthMode} onSessionLost={sessionLost} />
+          <PronosticsSection user={user} checking={authChecking} onOpenAuth={setAuthMode} onSessionLost={sessionLost} onRefresh={refreshAuth} />
         )}
 
         {/* TAB: ACTUALITÉS */}

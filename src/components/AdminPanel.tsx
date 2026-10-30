@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Sparkles, LogOut, Plus, ArrowLeft, Trash2, Eye } from 'lucide-react';
 import { AdminStats } from './AdminStats';
 import { AdminQuota } from './AdminQuota';
+import { AdminSubscribers } from './AdminSubscribers';
 import { adminRequest, clearAdminToken, getAdminToken, setAdminToken, OwnArticle } from '../services/articles';
 
 const CATEGORIES = ['FOOTBALL', 'MERCATO', 'EUROPE', 'AFRIQUE', 'BASKET', 'TENNIS', 'AUTRE'];
@@ -384,6 +385,7 @@ const AdminPanel: React.FC = () => {
         </header>
         {banner}
         <AdminQuota />
+        <AdminSubscribers />
         <AdminStats />
         <button onClick={() => openEditor()} className={`${primary} w-full inline-flex items-center justify-center gap-2`}>
           <Plus className="w-4 h-4" /> Nouvel article

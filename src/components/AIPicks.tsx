@@ -7,7 +7,7 @@ import { ShareButton } from './ShareButton';
 const formatKickoff = (iso: string) =>
   new Date(iso).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
-export const AIPicks: React.FC<{ onAuthLost?: () => void; defaultHistoryOpen?: boolean }> = ({ onAuthLost, defaultHistoryOpen }) => {
+export const AIPicks: React.FC<{ onAuthLost?: () => void; onAccessLost?: () => void; defaultHistoryOpen?: boolean }> = ({ onAuthLost, onAccessLost, defaultHistoryOpen }) => {
   const [result, setResult] = useState<PicksResult | null>(() => readCachedPicks());
 
   useEffect(() => {
@@ -17,6 +17,11 @@ export const AIPicks: React.FC<{ onAuthLost?: () => void; defaultHistoryOpen?: b
       if (r.state === 'auth') {
         setResult(null);
         onAuthLost?.(); // session expirée : on repasse à l'écran de connexion
+        return;
+      }
+      if (r.state === 'subscription') {
+        setResult(null);
+        onAccessLost?.(); // essai terminé : on affiche l'offre d'abonnement
         return;
       }
       // En cas d'erreur réseau, on garde les pronostics déjà affichés
@@ -65,6 +70,16 @@ export const AIPicks: React.FC<{ onAuthLost?: () => void; defaultHistoryOpen?: b
                 key={p.fixtureId}
                 className="rounded-xl border border-slate-200/70 dark:border-white/10 bg-white/50 dark:bg-white/[0.03] p-3 flex flex-col gap-2"
               >
+                {p.tier && (
+                  <span
+                    className={`self-start px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                      p.tier === 'safe' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                    }`}
+                    title={p.tier === 'safe' ? 'Très probable, cote modeste' : 'Moins probable mais mieux payé : plus risqué'}
+                  >
+                    {p.tier === 'safe' ? 'Sûr' : 'Valeur'}
+                  </span>
+                )}
                 <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                   <span className="truncate">{p.league}</span>
                   <span className="flex items-center gap-1 shrink-0">
@@ -75,7 +90,14 @@ export const AIPicks: React.FC<{ onAuthLost?: () => void; defaultHistoryOpen?: b
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-snug">
                   {p.home} vs {p.away}
                 </h3>
-                <p className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">{p.market}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">{p.market}</p>
+                  {typeof p.odds === 'number' && (
+                    <span className="shrink-0 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 text-xs font-black tabular-nums" title="Meilleure cote relevée chez les bookmakers">
+                      Cote {p.odds.toFixed(2).replace('.', ',')}
+                    </span>
+                  )}
+                </div>
 
                 <div>
                   <div className="flex items-center justify-between text-[11px] mb-1">

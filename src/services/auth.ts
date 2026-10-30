@@ -1,6 +1,18 @@
+export interface AccessInfo {
+  status: 'trial' | 'premium' | 'expired';
+  until: number | null; // fin de l'essai ou de l'abonnement (ms)
+  price: number;
+  days: number;
+  trialDays: number;
+  currency: string;
+  payments: boolean;
+  link: string; // lien de paiement
+}
+
 export interface AuthUser {
   name: string;
   email: string;
+  access: AccessInfo;
 }
 
 export type AuthResult = { ok: true; user: AuthUser } | { ok: false; error: string };
@@ -52,5 +64,17 @@ export async function logoutRequest(): Promise<void> {
     localStorage.removeItem(PICKS_CACHE_KEY); // les pronostics en cache ne doivent pas rester visibles après la déconnexion
   } catch {
     /* ignoré */
+  }
+}
+
+// ---------- Abonnement ----------
+// Le client a payé via le lien : on prévient l'admin, qui active le compte depuis /admin > Abonnés
+export async function claimPayment(note: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const json = await post('/api/pay/claim', { note });
+    if (json.success) return { ok: true };
+    return { ok: false, error: typeof json.error === 'string' ? json.error : 'Envoi impossible pour le moment.' };
+  } catch {
+    return { ok: false, error: 'Connexion au serveur impossible. Vérifie ta connexion internet.' };
   }
 }

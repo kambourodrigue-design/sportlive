@@ -77,3 +77,18 @@ Flux RSS gratuits de Maxifoot (`/api/news`, cache 15 min, `NEWS_CACHE_SECONDS` p
 ## Quota API (page /admin)
 - Carte « Quota API-Football » en haut de `/admin` : requêtes utilisées / limite du jour, barre verte, orange (≥ 70 %) puis rouge (≥ 90 %), compte à rebours avant la remise à zéro (00h00 UTC). Rafraîchie toutes les minutes.
 - Route `GET /api/admin/quota` (protégée) : interroge `/status` d'API-Football, qui ne consomme pas de requête du quota.
+
+## Abonnement aux pronostics IA (lien de paiement + activation manuelle)
+- Essai gratuit de 5 jours (à la création du compte ; pour un compte existant, à sa première connexion), puis abonnement. Le client paie via ton lien de paiement, clique sur « J'ai payé » (demande visible dans l'admin), puis tu actives son compte.
+- Réglages dans `/admin` > Abonnés > « Lien de paiement et tarif » : lien https, prix (FCFA) et durée (jours). Sans lien enregistré, personne n'est bloqué (comportement d'avant). Variables facultatives : `PAYMENT_LINK`, `PREMIUM_PRICE`, `PREMIUM_DAYS` (valeurs de départ) et `TRIAL_DAYS` (5 par défaut).
+- Section Abonnés : compteurs (abonnés / essai / expirés), paiements à vérifier, activation par e-mail (+ N jours, qui s'ajoutent à l'abonnement en cours), +7 jours / +durée standard sur chaque compte, retrait d'accès, recherche et filtres.
+- La liste vient d'un index mis à jour à l'inscription, à la connexion et à chaque action admin : un compte jamais reconnecté depuis la mise en ligne n'apparaît pas encore, mais « Activer un abonnement » fonctionne avec son e-mail.
+- API admin : `GET /api/admin/subscribers`, `POST /api/admin/subscribers/grant | revoke | dismiss`, `POST /api/admin/pay-settings`. Côté visiteur : `POST /api/pay/claim`. `/api/picks` et `/api/picks/history` répondent 402 quand l'essai est fini et sans abonnement (blocage côté serveur).
+
+## Moteur de pronostics (cotes + valeur)
+- Fichier `worker/picksModel.ts` (sans dépendance, testable seul). Pour chaque match, la probabilité de chaque pari (1, N, 2, double chance, plus/moins de buts, les deux marquent) est calculée en fusionnant : la probabilité implicite des bookmakers (marge retirée, médiane), les pourcentages d'API-Football et un modèle de Poisson sur les buts moyens (domicile/extérieur). Le poids du marché est le plus élevé.
+- Elle est comparée à la MEILLEURE cote trouvée chez les bookmakers : valeur = probabilité × cote − 1. Seuls les paris qui passent les seuils sont envoyés à l'IA (DeepSeek, puis Claude en secours) qui joue le rôle de validateur : blessés, forme, enjeu, classement, face-à-face. Elle ne peut choisir que parmi ces paris, et sa confiance ne peut pas dépasser la probabilité calculée.
+- Deux niveaux : « Sûr » (confiance ≥ 80 %, cote ≥ 1,25, valeur ≥ 2 %, 2 au plus) et « Valeur » (confiance ≥ 65 %, cote ≥ 1,60, valeur ≥ 4 %, 2 au plus). Le niveau est affiché sur chaque pronostic et l'historique donne le taux de réussite et le rendement de chacun.
+- Seuils (variables Cloudflare) : `PICKS_MIN_CONFIDENCE` (80), `PICKS_MIN_ODDS` (1.25), `PICKS_MIN_EDGE` (2, en %) pour « Sûr » ; `PICKS_VALUE_MIN_CONFIDENCE` (65), `PICKS_VALUE_MIN_ODDS` (1.60), `PICKS_VALUE_MIN_EDGE` (4, en %) pour « Valeur ». Plus ils sont stricts, moins il y a de pronostics.
+- Coût API par analyse : environ 1 à 2 (matchs du jour) + 10 (prédictions) + 6 (cotes) + 4 (blessés) + classements en cache. Sous 40 requêtes restantes, cotes et blessés sont sautés. Le plan gratuit (100/jour) est juste : un plan payant d'API-Football est recommandé.
+- L'historique enregistre la cote de chaque pronostic ; après 5 pronostics vérifiés avec cote, le « rendement à mise égale » s'affiche. C'est la vraie mesure de la qualité, plus que le taux de réussite.

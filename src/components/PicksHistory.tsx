@@ -117,6 +117,32 @@ export const PicksHistory: React.FC<{ reloadKey?: string; defaultOpen?: boolean 
             </div>
           </div>
 
+          {stats.byTier && stats.byTier.length > 0 && (
+            <ul className="mt-3 flex flex-wrap gap-2" aria-label="Résultats par niveau">
+              {stats.byTier.map((t) => (
+                <li key={t.tier} className="rounded-xl border border-slate-200/70 dark:border-white/10 px-2.5 py-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+                  <strong className={t.tier === 'safe' ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'}>{t.tier === 'safe' ? 'Sûr' : 'Valeur'}</strong>{' '}
+                  {t.won}/{t.won + t.lost} ({t.rate ?? '–'} %)
+                  {t.yieldPct !== null && (
+                    <>
+                      {' '}· rendement <strong className="tabular-nums">{t.yieldPct > 0 ? '+' : ''}{String(t.yieldPct).replace('.', ',')} %</strong>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {stats.yield && (
+            <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+              Rendement à mise égale (cotes enregistrées, {stats.yield.bets} pronostics) :{' '}
+              <strong className={`tabular-nums ${stats.yield.percent >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-fuchsia-600 dark:text-fuchsia-300'}`}>
+                {stats.yield.percent > 0 ? '+' : ''}
+                {String(stats.yield.percent).replace('.', ',')} %
+              </strong>
+            </p>
+          )}
+
           {stats.form && stats.form.length > 0 && (
             <div className="mt-3 flex items-center gap-2">
               <span className="text-[11px] text-slate-500 dark:text-slate-400">Forme</span>

@@ -120,7 +120,7 @@ export const PAGES: Record<string, PageDef> = {
             "Les compétitions africaines : Coupe d'Afrique des Nations, Ligues des Champions et Coupe de la Confédération CAF, et les championnats nationaux.",
             'Des pages dédiées à chaque championnat (matchs, classement, buteurs), chaque équipe et chaque match.',
             'Des alertes de buts et un suivi de tes matchs favoris.',
-            <>Des <A to="/">pronostics générés par IA</A>, réservés aux membres inscrits gratuitement.</>,
+            <>Des <A to="/">pronostics générés par IA</A>, réservés aux membres inscrits : 5 jours d'essai gratuit, puis abonnement.</>,
             "Les actualités du football.",
           ]}
         />
@@ -212,6 +212,10 @@ export const PAGES: Record<string, PageDef> = {
         <H>Pronostics</H>
         <P>
           Les pronostics sont générés par des modèles d'intelligence artificielle. Ils sont purement indicatifs, ne constituent pas un conseil financier ou de paris, et ne garantissent aucun résultat ni aucun gain. ScoreAfrica n'est pas un opérateur de paris et n'accepte aucune mise. Toute décision de jeu relève de ta seule responsabilité. Voir <A to="/jeu-responsable">Jeu responsable</A>.
+        </P>
+        <H>Abonnement</H>
+        <P>
+          Les pronostics IA sont accessibles gratuitement pendant 5 jours après la création du compte, puis sur abonnement payant. Le paiement se fait via un lien sécurisé et l'accès est activé manuellement après vérification. L'abonnement dure la période indiquée au moment du paiement, ne se renouvelle pas automatiquement et peut être prolongé par un nouveau paiement. Les paiements effectués ne sont en principe pas remboursables, sauf erreur de notre part : écris-nous depuis la page <A to="/contact">Contact</A>.
         </P>
         <H>Compte</H>
         <UL
