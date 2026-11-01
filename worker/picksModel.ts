@@ -102,7 +102,10 @@ export function parseOdds(response: any[]): OddsMap {
   for (const bet of BETS) {
     const a = acc[bet];
     if (!a || a.odds.length === 0) continue;
-    out[bet] = { best: Math.max(...a.odds), median: median(a.odds), prob: a.probs.length ? median(a.probs) : null, books: a.odds.length };
+    const med = median(a.odds);
+    // Une cote très au-dessus de la médiane est presque toujours une erreur ou une cote périmée : on l'ignore
+    const sane = a.odds.filter((o) => o <= med * 1.2);
+    out[bet] = { best: Math.max(...sane), median: med, prob: a.probs.length ? median(a.probs) : null, books: a.odds.length };
   }
   // Double chance : si les bookmakers ne la proposent pas, on déduit la probabilité du 1N2 (la cote reste inconnue)
   return out;

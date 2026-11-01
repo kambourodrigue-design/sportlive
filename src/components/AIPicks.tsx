@@ -3,6 +3,7 @@ import { Sparkles, Clock } from 'lucide-react';
 import { fetchPicks, readCachedPicks, PicksResult } from '../services/picks';
 import { PicksHistory } from './PicksHistory';
 import { ShareButton } from './ShareButton';
+import { DailyCoupon } from './DailyCoupon';
 
 const formatKickoff = (iso: string) =>
   new Date(iso).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
@@ -62,6 +63,8 @@ export const AIPicks: React.FC<{ onAuthLost?: () => void; onAccessLost?: () => v
         )}
 
         {hint && <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
+
+        {result?.state === 'ok' && <DailyCoupon picks={result.picks} />}
 
         {result?.state === 'ok' && (
           <div className="grid gap-2.5 sm:grid-cols-3">

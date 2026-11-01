@@ -5,6 +5,8 @@ import { goBack } from '../router';
 import { Logo } from '../components/Logo';
 import { PageHeader, TabBar } from '../components/DetailChrome';
 import { ShareButton } from '../components/ShareButton';
+import { FollowTeamButton } from '../components/FollowTeamButton';
+import { rememberUpcoming, useFollowedTeams } from '../services/followTeams';
 import { FixtureList } from '../components/FixtureList';
 import { TeamData, fetchTeam, teamLogoUrl } from '../services/football';
 
@@ -45,6 +47,12 @@ export const TeamPage: React.FC<TeamPageProps> = ({ routeId, apiConfigured, demo
   const upcoming = (apiConfigured ? data?.next ?? [] : demo.filter((m) => m.status === 'SCHEDULED'));
   const loading = apiConfigured && numeric !== null && data === null;
   const venue = data?.info?.venue;
+  const { isFollowed } = useFollowedTeams();
+  const followed = isFollowed(routeId);
+  // Équipe suivie : on garde ses prochains matchs pour pouvoir envoyer les alertes de but
+  useEffect(() => {
+    if (followed && data?.next) rememberUpcoming(routeId, data.next);
+  }, [followed, data, routeId]);
 
   return (
     <div className="max-w-3xl mx-auto md:py-4">
@@ -67,7 +75,10 @@ export const TeamPage: React.FC<TeamPageProps> = ({ routeId, apiConfigured, demo
               </p>
             )}
           </div>
-          <ShareButton className="hidden md:block ml-auto shrink-0" variant="pill" title={name} text="Résultats et calendrier sur ScoreAfrica" />
+          <div className="ml-auto shrink-0 flex flex-col items-end gap-2">
+            <FollowTeamButton team={{ id: routeId, name }} />
+            <ShareButton className="hidden md:block" variant="pill" title={name} text="Résultats et calendrier sur ScoreAfrica" />
+          </div>
         </header>
 
         <TabBar tabs={[{ id: 'resultats' as const, label: 'Résultats' }, { id: 'calendrier' as const, label: 'Calendrier' }]} active={tab} onChange={setTab} />

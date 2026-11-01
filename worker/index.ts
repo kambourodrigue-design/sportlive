@@ -575,7 +575,38 @@ function standingLine(data: unknown, teamId: number, where: 'home' | 'away'): st
 
 const quotaLow = () => Boolean(lastQuota && lastQuota.remaining < DEEP_MIN_QUOTA);
 
-async function loadCandidates(env: Env, cfg: PickConfig): Promise<Candidate[]> {
+// Exécute fn sur chaque élément avec au plus n appels en parallèle (API-Football limite le débit par minute)
+async function mapLimit<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+  const out: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        out[i] = { status: 'fulfilled', value: await fn(items[i]) };
+      } catch (reason) {
+        out[i] = { status: 'rejected', reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+  return out;
+}
+
+const RATE_RE = /rate|too many|429/i;
+
+async function loadCandidates(env: Env, cfg: PickConfig): Promise<{ candidates: Candidate[]; incomplete: boolean }> {
+  let limited = false; // l'API a refusé au moins un appel pour cause de débit : l'analyse est alors incomplète
+  const soft = async (path: string): Promise<any[]> => {
+    try {
+      const r = await callApiRaw(env, path);
+      if (r.errors && RATE_RE.test(r.errors)) limited = true;
+      return r.response;
+    } catch (err) {
+      if (err instanceof Error && RATE_RE.test(err.message)) limited = true;
+      throw err;
+    }
+  };
   const now = new Date();
   const days = [isoDay(now), isoDay(new Date(now.getTime() + 86400000))];
   let fixtures: any[] = [];
@@ -597,9 +628,11 @@ async function loadCandidates(env: Env, cfg: PickConfig): Promise<Candidate[]> {
 
   // 1) Prédictions d'API-Football : buts moyens, forme, face-à-face (tout est lu, rien n'est jeté)
   const base = (
-    await Promise.allSettled(
-      fixtures.map(async (f) => {
-        const [p] = await callApi(env, `/predictions?fixture=${f.fixture.id}`);
+    await mapLimit(
+      fixtures,
+      4,
+      async (f) => {
+        const [p] = await soft(`/predictions?fixture=${f.fixture.id}`);
         const percent = { home: pct(p?.predictions?.percent?.home), draw: pct(p?.predictions?.percent?.draw), away: pct(p?.predictions?.percent?.away) };
         const lam = poissonLambdas(p?.teams);
         const c: Candidate & { _f: any; _api: ReturnType<typeof apiProbs>; _poisson: ReturnType<typeof poissonProbs> | null } = {
@@ -623,7 +656,7 @@ async function loadCandidates(env: Env, cfg: PickConfig): Promise<Candidate[]> {
           _poisson: lam ? poissonProbs(lam.lh, lam.la) : null,
         };
         return c;
-      }),
+      },
     )
   ).flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
 
@@ -634,12 +667,10 @@ async function loadCandidates(env: Env, cfg: PickConfig): Promise<Candidate[]> {
   };
   const ranked = [...base].sort((a, b) => prelim(b) - prelim(a));
   const oddsMaps = new Map<number, OddsMap>();
-  if (!quotaLow()) {
-    await Promise.allSettled(
-      ranked.slice(0, MAX_ODDS_LOOKUPS).map(async (c) => {
-        oddsMaps.set(c.fixtureId, parseOdds(await callApi(env, `/odds?fixture=${c.fixtureId}`)));
-      }),
-    );
+  if (!quotaLow() && !limited) {
+    await mapLimit(ranked.slice(0, MAX_ODDS_LOOKUPS), 3, async (c) => {
+      oddsMaps.set(c.fixtureId, parseOdds(await soft(`/odds?fixture=${c.fixtureId}`)));
+    });
   }
 
   // 3) Paris à valeur : probabilité fusionnée × meilleure cote
@@ -654,12 +685,14 @@ async function loadCandidates(env: Env, cfg: PickConfig): Promise<Candidate[]> {
     .slice(0, MAX_DEEP);
 
   // 4) Contexte supplémentaire pour les finalistes : blessés et classement
-  if (!quotaLow()) {
-    await Promise.allSettled(
-      shortlisted.map(async (c) => {
+  if (!quotaLow() && !limited) {
+    await mapLimit(
+      shortlisted,
+      3,
+      async (c) => {
         const f = c._f;
         const [inj, st] = await Promise.allSettled([
-          callApi(env, `/injuries?fixture=${c.fixtureId}`),
+          soft(`/injuries?fixture=${c.fixtureId}`),
           f.league?.id && f.league?.season
             ? cachedApi(env, `standings_${f.league.id}_${f.league.season}`, `/standings?league=${f.league.id}&season=${f.league.season}`, 3600)
             : Promise.resolve(null),
@@ -676,12 +709,12 @@ async function loadCandidates(env: Env, cfg: PickConfig): Promise<Candidate[]> {
           const data = (st.value as { data: unknown }).data;
           c.rank = { home: standingLine(data, f.teams?.home?.id, 'home'), away: standingLine(data, f.teams?.away?.id, 'away') };
         }
-      }),
+      },
     );
   }
 
   // On n'envoie à l'IA que les champs utiles (pas les champs internes)
-  return shortlisted.map(({ _f, _api, _poisson, ...c }) => c);
+  return { candidates: shortlisted.map(({ _f, _api, _poisson, ...c }) => c), incomplete: limited };
 }
 
 type AiModelName = 'claude' | 'deepseek';
@@ -866,8 +899,12 @@ async function runCron(env: Env, cron: string): Promise<void> {
 
 async function buildPicks(env: Env): Promise<unknown[]> {
   const cfg = pickConfig(env);
-  const candidates = await loadCandidates(env, cfg);
-  if (candidates.length === 0) return []; // aucun pari assez probable avec une bonne cote : mieux vaut ne rien proposer
+  const { candidates, incomplete } = await loadCandidates(env, cfg);
+  if (candidates.length === 0) {
+    // Analyse incomplète (limite de débit de l'API) : on ne garde pas ce « vide » en cache 6 h, on réessaiera
+    if (incomplete) throw new Error("API-Football a limité le débit : analyse incomplète, nouvel essai plus tard.");
+    return []; // aucun pari assez probable avec une bonne cote : mieux vaut ne rien proposer
+  }
   const { picks: aiPicks, model } = await askAi(env, candidates, cfg);
   const byId = new Map(candidates.map((c) => [c.fixtureId, c]));
   const used = new Set<number>();
@@ -1983,15 +2020,18 @@ async function runPushCheck(env: Env, liveTtl: number): Promise<number> {
   } catch {
     /* état vide : on repart de l'observation en cours, sans rien notifier */
   }
+  // On ne retient que les matchs surveillés (peu d'écritures KV) ; un match absent d'une réponse de l'API garde son dernier score connu
   const next: typeof state = {};
+  for (const id of watched) if (state[id]) next[id] = state[id];
   const alerts: { id: number; title: string; body: string; tag: string }[] = [];
   for (const f of live) {
     const id = f.fixture.id as number;
+    if (!watched.has(id)) continue;
     const h = f.goals.home, a = f.goals.away;
     if (typeof h !== 'number' || typeof a !== 'number') continue;
-    next[id] = { h, a };
     const prev = state[id];
-    if (!prev || !watched.has(id)) continue; // première observation : on note le score sans notifier
+    next[id] = { h, a };
+    if (!prev) continue; // première observation : on note le score sans notifier
     for (const side of ['home', 'away'] as const) {
       const was = side === 'home' ? prev.h : prev.a;
       const is = side === 'home' ? h : a;

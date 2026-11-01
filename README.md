@@ -92,3 +92,14 @@ Flux RSS gratuits de Maxifoot (`/api/news`, cache 15 min, `NEWS_CACHE_SECONDS` p
 - Seuils (variables Cloudflare) : `PICKS_MIN_CONFIDENCE` (80), `PICKS_MIN_ODDS` (1.25), `PICKS_MIN_EDGE` (2, en %) pour « Sûr » ; `PICKS_VALUE_MIN_CONFIDENCE` (65), `PICKS_VALUE_MIN_ODDS` (1.60), `PICKS_VALUE_MIN_EDGE` (4, en %) pour « Valeur ». Plus ils sont stricts, moins il y a de pronostics.
 - Coût API par analyse : environ 1 à 2 (matchs du jour) + 10 (prédictions) + 6 (cotes) + 4 (blessés) + classements en cache. Sous 40 requêtes restantes, cotes et blessés sont sautés. Le plan gratuit (100/jour) est juste : un plan payant d'API-Football est recommandé.
 - L'historique enregistre la cote de chaque pronostic ; après 5 pronostics vérifiés avec cote, le « rendement à mise égale » s'affiche. C'est la vraie mesure de la qualité, plus que le taux de réussite.
+
+## Mes équipes et alertes de but
+
+- Page d'une équipe : bouton « Suivre ». Les équipes suivies sont gardées sur l'appareil (onglet Favoris > « Mes équipes »).
+- Chaque but des matchs favoris **et** des matchs des équipes suivies déclenche une notification (Web Push, site fermé). Le serveur ne connaît que les matchs à surveiller : aucun compte nécessaire.
+- Les prochains matchs d'une équipe suivie sont mémorisés quand on ouvre sa page ou que le match apparaît dans la liste du jour : ouvre le site de temps en temps pour que les nouveaux matchs soient pris en compte.
+- Quota API-Football : tant qu'un match surveillé est en cours, la vérification utilise le cache des matchs en direct (`LIVE_CACHE_SECONDS`). Sur le plan gratuit (100 requêtes/jour), mets `LIVE_CACHE_SECONDS` à 1200 : les alertes arriveront avec jusqu'à 20 minutes de retard. Avec un plan payant, garde 100.
+
+## Coupon du jour
+
+Dans Pronostics IA : combiné des 2 à 3 paris « Sûr » à venir (cote totale = produit des cotes, chance estimée = produit des confiances), avec boutons copier et partager.

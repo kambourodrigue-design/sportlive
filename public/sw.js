@@ -1,5 +1,5 @@
 // Service worker minimal : l'app s'ouvre même hors-ligne ; l'API (/api/*) n'est jamais mise en cache ici.
-const CACHE = 'scoreafrica-v2';
+const CACHE = 'scoreafrica-v3';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
@@ -26,8 +26,11 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(
       fetch(req)
         .then((r) => {
-          const copy = r.clone();
-          caches.open(CACHE).then((c) => c.put('/', copy));
+          // On ne garde en secours que l'accueil valide (pas une page d'erreur ni une autre page)
+          if (r.ok && url.pathname === '/') {
+            const copy = r.clone();
+            caches.open(CACHE).then((c) => c.put('/', copy));
+          }
           return r;
         })
         .catch(() => caches.match('/')),

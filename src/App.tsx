@@ -15,6 +15,8 @@ import { SearchModal } from './components/SearchModal';
 import { LiveToast } from './components/LiveToast';
 import { trackPageView } from './services/analytics';
 import { PushCard } from './components/PushCard';
+import { MyTeams } from './components/MyTeams';
+import { useFollowedTeams } from './services/followTeams';
 import { usePush } from './hooks/usePush';
 import { PronosticsSection, PicksTeaser } from './components/PronosticsSection';
 import { AuthModal, AuthMode } from './components/AuthModal';
@@ -150,7 +152,14 @@ export default function App() {
   }, [apiConfigured, matches, dayMatches, activeSport, isFootball]);
 
   // Championnats inconnus du catalogue : on les crée à la volée pour que leurs matchs s'affichent
-  const push = usePush(favoriteMatchIds, useMemo(() => [...matches, ...displayMatches], [matches, displayMatches]));
+  const { teams: followedTeams } = useFollowedTeams();
+  const followedIds = useMemo(() => followedTeams.map((t) => t.id), [followedTeams]);
+  const push = usePush(favoriteMatchIds, useMemo(() => [...matches, ...displayMatches], [matches, displayMatches]), followedIds);
+  // Onglet Favoris : matchs favoris + matchs des équipes suivies
+  const favTabIds = useMemo(
+    () => [...favoriteMatchIds, ...displayMatches.filter((m) => followedIds.includes(m.homeTeam.id) || followedIds.includes(m.awayTeam.id)).map((m) => m.id)],
+    [favoriteMatchIds, displayMatches, followedIds],
+  );
 
   const displayLeagues = useMemo<League[]>(() => {
     const known = new Set(leagues.map((l) => l.id));
@@ -366,7 +375,7 @@ export default function App() {
               <div className="max-w-7xl mx-auto flex items-center justify-between">
                 <div>
                   <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">
-                    Mes Matchs & Équipes Favoris ({favoriteMatchIds.length})
+                    Mes Matchs & Équipes Favoris ({new Set(favTabIds).size})
                   </h2>
                   <p className="text-xs text-slate-500">
                     Alertes automatiques activées pour ces rencontres
@@ -379,6 +388,7 @@ export default function App() {
                   Gérer les alertes
                 </button>
               </div>
+              <MyTeams />
               {!push.subscribed && (
                 <div className="max-w-7xl mx-auto mt-3">
                   <PushCard push={push} compact />
@@ -390,7 +400,7 @@ export default function App() {
               comingSoon={isTennis}
               leagues={displayLeagues}
               matches={displayMatches}
-              favoriteMatchIds={favoriteMatchIds}
+              favoriteMatchIds={favTabIds}
               onToggleFavoriteMatch={toggleFavoriteMatch}
               onToggleFavoriteLeague={toggleFavoriteLeague}
               onSelectMatch={handleSelectMatch}

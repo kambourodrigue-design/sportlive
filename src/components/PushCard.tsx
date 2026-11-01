@@ -10,11 +10,11 @@ export const PushCard: React.FC<{ push: PushState; compact?: boolean }> = ({ pus
   const { supported, permission, subscribed, busy, error, enable, disable } = push;
   const iosInstall = supported ? needsHomeScreenInstall() : /iphone|ipad|ipod/i.test(navigator.userAgent);
 
-  let hint = 'Reçois une notification à chaque but de tes matchs favoris, même quand le site est fermé.';
+  let hint = 'Reçois une notification à chaque but de tes matchs favoris et des équipes que tu suis, même quand le site est fermé.';
   if (!supported) hint = iosInstall ? "Sur iPhone, ajoute d'abord ScoreAfrica à l'écran d'accueil (Partager, puis « Sur l'écran d'accueil »), puis rouvre-le depuis l'icône." : "Ce navigateur ne gère pas les notifications. Essaie Chrome ou Firefox.";
   else if (iosInstall) hint = "Sur iPhone, ajoute d'abord ScoreAfrica à l'écran d'accueil (Partager, puis « Sur l'écran d'accueil »), puis active les alertes depuis l'icône.";
   else if (permission === 'denied' && !subscribed) hint = 'Les notifications sont bloquées pour ce site. Autorise-les dans les réglages du navigateur, puis reviens ici.';
-  else if (subscribed) hint = 'Alertes actives sur cet appareil : tu reçois chaque but de tes matchs favoris (matchs réels).';
+  else if (subscribed) hint = 'Alertes actives sur cet appareil : tu reçois chaque but de tes matchs favoris et de tes équipes suivies (matchs réels).';
 
   const disabled = busy || !supported || iosInstall || (permission === 'denied' && !subscribed);
 
