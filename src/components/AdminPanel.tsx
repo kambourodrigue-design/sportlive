@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Sparkles, LogOut, Plus, ArrowLeft, Trash2, Eye } from 'lucide-react';
 import { AdminStats } from './AdminStats';
 import { AdminQuota } from './AdminQuota';
+import { AdminPicksDiag } from './AdminPicksDiag';
 import { AdminSubscribers } from './AdminSubscribers';
 import { adminRequest, clearAdminToken, getAdminToken, setAdminToken, OwnArticle } from '../services/articles';
 
@@ -385,6 +386,7 @@ const AdminPanel: React.FC = () => {
         </header>
         {banner}
         <AdminQuota />
+        <AdminPicksDiag />
         <AdminSubscribers />
         <AdminStats />
         <button onClick={() => openEditor()} className={`${primary} w-full inline-flex items-center justify-center gap-2`}>

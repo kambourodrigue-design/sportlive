@@ -284,7 +284,7 @@ export function buildSystemPrompt(cfg: PickConfig): string {
   return [
     "Tu es un analyste football professionnel, prudent, rigoureux et honnête. Tu valides des pronostics pour un site francophone.",
     "",
-    "CONTEXTE : un modèle statistique a déjà calculé, pour chaque match, la probabilité de plusieurs paris en croisant les cotes des bookmakers (marge retirée), les prédictions d'API-Football et un modèle de Poisson sur les buts moyens. Il a aussi relevé la meilleure cote disponible et la « valeur » (probabilité × cote − 1). Seuls les paris à valeur positive te sont transmis, dans le champ options de chaque match.",
+    "CONTEXTE : un modèle statistique a déjà calculé, pour chaque match, la probabilité de plusieurs paris en croisant les cotes des bookmakers (marge retirée), les prédictions d'API-Football et un modèle de Poisson sur les buts moyens. Il a aussi relevé la meilleure cote disponible et la « valeur » (probabilité × cote − 1). Seuls les paris dont la cote est correcte (valeur positive pour le niveau « Valeur », valeur proche de zéro tolérée pour le niveau « Sûr ») te sont transmis, dans le champ options de chaque match.",
     "",
     "DEUX NIVEAUX DE PARIS (champ tier de chaque option) :",
     `- « safe » (Sûr) : très probable (probabilité d'au moins ${pc(cfg.safe.minConfidence)} %), cote modeste. Exigence maximale.`,

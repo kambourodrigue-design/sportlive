@@ -501,14 +501,14 @@ function pickConfig(env: Env): PickConfig {
   };
   return {
     safe: {
-      minConfidence: f(env.PICKS_MIN_CONFIDENCE, 80, 50, 95),
-      minOdds: f(env.PICKS_MIN_ODDS, 1.25, 1.05, 5),
-      minEdge: f(env.PICKS_MIN_EDGE, 2, 0, 30) / 100,
+      minConfidence: f(env.PICKS_MIN_CONFIDENCE, 72, 50, 95),
+      minOdds: f(env.PICKS_MIN_ODDS, 1.2, 1.05, 5),
+      minEdge: f(env.PICKS_MIN_EDGE, -2, -10, 30) / 100,
     },
     value: {
-      minConfidence: f(env.PICKS_VALUE_MIN_CONFIDENCE, 65, 40, 95),
+      minConfidence: f(env.PICKS_VALUE_MIN_CONFIDENCE, 58, 40, 95),
       minOdds: f(env.PICKS_VALUE_MIN_ODDS, 1.6, 1.1, 8),
-      minEdge: f(env.PICKS_VALUE_MIN_EDGE, 4, 0, 40) / 100,
+      minEdge: f(env.PICKS_VALUE_MIN_EDGE, 2, -10, 40) / 100,
     },
     maxSafe: 2,
     maxValue: 2,
@@ -595,7 +595,9 @@ async function mapLimit<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): 
 
 const RATE_RE = /rate|too many|429/i;
 
-async function loadCandidates(env: Env, cfg: PickConfig): Promise<{ candidates: Candidate[]; incomplete: boolean }> {
+interface CandidateStats { fixtures: number; analyzed: number; withOdds: number; lowQuota: boolean }
+
+async function loadCandidates(env: Env, cfg: PickConfig): Promise<{ candidates: Candidate[]; incomplete: boolean; stats: CandidateStats }> {
   let limited = false; // l'API a refusé au moins un appel pour cause de débit : l'analyse est alors incomplète
   const soft = async (path: string): Promise<any[]> => {
     try {
@@ -714,7 +716,8 @@ async function loadCandidates(env: Env, cfg: PickConfig): Promise<{ candidates: 
   }
 
   // On n'envoie à l'IA que les champs utiles (pas les champs internes)
-  return { candidates: shortlisted.map(({ _f, _api, _poisson, ...c }) => c), incomplete: limited };
+  const stats: CandidateStats = { fixtures: fixtures.length, analyzed: base.length, withOdds: [...oddsMaps.values()].filter((o) => Object.keys(o).length > 0).length, lowQuota: quotaLow() };
+  return { candidates: shortlisted.map(({ _f, _api, _poisson, ...c }) => c), incomplete: limited || stats.lowQuota, stats };
 }
 
 type AiModelName = 'claude' | 'deepseek';
@@ -850,10 +853,58 @@ function picksTtlSeconds(env: Env): number {
   return Math.max(60, parseInt(env.PICKS_CACHE_SECONDS || '21600', 10)); // 6 h par défaut
 }
 
+// Journal de la dernière génération (affiché dans /admin) : explique pourquoi il y a, ou non, des pronostics
+interface PicksDiag {
+  ts: number;
+  trigger: 'visite' | 'auto' | 'admin';
+  status: 'ok' | 'empty' | 'error';
+  reason: string;
+  fixtures: number; // matchs trouvés dans les compétitions suivies
+  analyzed: number; // matchs dont les prédictions ont pu être lues
+  withOdds: number; // matchs avec des cotes
+  candidates: number; // paris présélectionnés (filtres passés)
+  aiKept: number; // pronostics validés par l'IA
+  model?: string;
+  quotaRemaining: number | null;
+  ms: number;
+}
+const PICKS_DIAG_KEY = 'picks_diag_v1';
+
+async function loadPicksDiag(env: Env): Promise<PicksDiag | null> {
+  try {
+    const raw = env.CACHE ? await env.CACHE.get(PICKS_DIAG_KEY) : null;
+    return raw ? (JSON.parse(raw) as PicksDiag) : null;
+  } catch {
+    return null;
+  }
+}
+
 // Génère les pronostics, les enregistre dans l'historique et garde une copie « dernière version connue »
-async function refreshPicks(env: Env): Promise<any[]> {
-  const picks = (await buildPicks(env)) as any[];
+async function refreshPicks(env: Env, trigger: PicksDiag['trigger'] = 'visite'): Promise<any[]> {
+  const t0 = Date.now();
+  const diag: PicksDiag = { ts: t0, trigger, status: 'ok', reason: '', fixtures: 0, analyzed: 0, withOdds: 0, candidates: 0, aiKept: 0, quotaRemaining: null, ms: 0 };
+  const saveDiag = async () => {
+    diag.ms = Date.now() - t0;
+    diag.quotaRemaining = lastQuota ? lastQuota.remaining : null;
+    try {
+      if (env.CACHE) await env.CACHE.put(PICKS_DIAG_KEY, JSON.stringify(diag));
+    } catch {
+      /* non bloquant */
+    }
+  };
+  let picks: any[];
+  try {
+    picks = (await buildPicks(env, diag)) as any[];
+  } catch (err) {
+    diag.status = 'error';
+    diag.reason = err instanceof Error ? err.message.slice(0, 300) : 'Erreur inconnue';
+    await saveDiag();
+    throw err;
+  }
+  diag.aiKept = picks.length;
   if (picks.length) {
+    diag.status = 'ok';
+    diag.reason = `${picks.length} pronostic${picks.length > 1 ? 's' : ''} publié${picks.length > 1 ? 's' : ''}.`;
     await recordHistory(env, picks);
     memLatest = { ts: Date.now(), picks };
     if (env.CACHE) {
@@ -863,7 +914,11 @@ async function refreshPicks(env: Env): Promise<any[]> {
         /* non bloquant */
       }
     }
+  } else {
+    diag.status = 'empty';
+    if (!diag.reason) diag.reason = "Aucun pronostic ne répond aux critères.";
   }
+  await saveDiag();
   // Même « aucun pari » est gardé en cache aussi longtemps : relancer l'analyse coûte une vingtaine d'appels API
   await cacheSet(env, `picks_${isoDay(new Date())}`, picks, picksTtlSeconds(env));
   return picks;
@@ -890,22 +945,37 @@ async function runCron(env: Env, cron: string): Promise<void> {
   if (cron.includes('7,13') && hasAi(env)) {
     try {
       const hit = await cacheGet(env, `picks_${isoDay(new Date())}`, picksTtlSeconds(env));
-      if (!hit) await refreshPicks(env);
+      if (!hit) await refreshPicks(env, 'auto');
     } catch {
       /* non bloquant */
     }
   }
 }
 
-async function buildPicks(env: Env): Promise<unknown[]> {
+async function buildPicks(env: Env, diag: PicksDiag): Promise<unknown[]> {
   const cfg = pickConfig(env);
-  const { candidates, incomplete } = await loadCandidates(env, cfg);
+  const { candidates, incomplete, stats } = await loadCandidates(env, cfg);
+  diag.fixtures = stats.fixtures;
+  diag.analyzed = stats.analyzed;
+  diag.withOdds = stats.withOdds;
+  diag.candidates = candidates.length;
   if (candidates.length === 0) {
     // Analyse incomplète (limite de débit de l'API) : on ne garde pas ce « vide » en cache 6 h, on réessaiera
-    if (incomplete) throw new Error("API-Football a limité le débit : analyse incomplète, nouvel essai plus tard.");
+    if (incomplete) throw new Error("API-Football a limité le débit (quota ou cadence) : analyse incomplète, nouvel essai plus tard.");
+    if (stats.fixtures === 0) diag.reason = "Aucun match à venir dans les compétitions suivies (aujourd'hui et demain) : trêve ou jour sans match.";
+    else if (stats.analyzed === 0) diag.reason = "Les prédictions d'API-Football n'ont pas pu être lues pour ces matchs.";
+    else if (stats.withOdds === 0) diag.reason = stats.lowQuota ? 'Quota API presque épuisé : les cotes n\'ont pas été demandées, donc aucun pari ne peut être validé.' : "Aucune cote disponible chez les bookmakers pour ces matchs (trop tôt avant le coup d'envoi ?).";
+    else diag.reason = `${stats.analyzed} matchs analysés, mais aucun pari ne passe les filtres (confiance, cote minimale, avantage). Assouplis PICKS_MIN_CONFIDENCE ou PICKS_MIN_ODDS si tu veux plus de pronostics.`;
     return []; // aucun pari assez probable avec une bonne cote : mieux vaut ne rien proposer
   }
-  const { picks: aiPicks, model } = await askAi(env, candidates, cfg);
+  let ai: Awaited<ReturnType<typeof askAi>>;
+  try {
+    ai = await askAi(env, candidates, cfg);
+  } catch (err) {
+    throw new Error(`L'IA n'a pas répondu (crédit épuisé, clé invalide ou service indisponible) : ${err instanceof Error ? err.message : 'erreur inconnue'}`);
+  }
+  const { picks: aiPicks, model } = ai;
+  diag.model = model;
   const byId = new Map(candidates.map((c) => [c.fixtureId, c]));
   const used = new Set<number>();
   const picks = aiPicks.flatMap((p) => {
@@ -935,7 +1005,9 @@ async function buildPicks(env: Env): Promise<unknown[]> {
     ];
   });
   const take = (tier: Tier, n: number) => picks.filter((p) => p.tier === tier).sort((a, b) => b.confidence - a.confidence).slice(0, n);
-  return [...take('safe', cfg.maxSafe), ...take('value', cfg.maxValue)];
+  const final = [...take('safe', cfg.maxSafe), ...take('value', cfg.maxValue)];
+  if (final.length === 0) diag.reason = `${candidates.length} pari${candidates.length > 1 ? 's' : ''} présélectionné${candidates.length > 1 ? 's' : ''}, mais l'IA les a tous refusés (ou sa confiance est sous le seuil).`;
+  return final;
 }
 
 // ---------------------------------------------------------------------------
@@ -1175,6 +1247,19 @@ async function handleAdmin(request: Request, env: Env, url: URL): Promise<Respon
   if (path === '/api/admin/stats' && request.method === 'GET') {
     const d = parseInt(url.searchParams.get('days') || '30', 10);
     return json({ success: true, ...(await statsSummary(env, Math.min(90, Math.max(1, Number.isFinite(d) ? d : 30)))) });
+  }
+  if (path === '/api/admin/picks-diag' && request.method === 'GET') {
+    const hit = await cacheGet(env, `picks_${isoDay(new Date())}`, picksTtlSeconds(env));
+    return json({ success: true, diag: await loadPicksDiag(env), cached: Array.isArray(hit) ? hit.length : null, aiConfigured: hasAi(env), configured: isConfigured(env) });
+  }
+  if (path === '/api/admin/picks-refresh' && request.method === 'POST') {
+    if (!isConfigured(env) || !hasAi(env)) return json({ success: false, error: 'Clé API football ou clé IA manquante.' }, 400);
+    try {
+      const picks = await refreshPicks(env, 'admin');
+      return json({ success: true, count: picks.length, diag: await loadPicksDiag(env) });
+    } catch (err) {
+      return json({ success: false, error: err instanceof Error ? err.message : 'Échec', diag: await loadPicksDiag(env) }, 200);
+    }
   }
   if (path === '/api/admin/quota' && request.method === 'GET') {
     return json({ success: true, ...(await apiQuota(env)) });

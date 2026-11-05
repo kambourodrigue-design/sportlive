@@ -88,8 +88,8 @@ Flux RSS gratuits de Maxifoot (`/api/news`, cache 15 min, `NEWS_CACHE_SECONDS` p
 ## Moteur de pronostics (cotes + valeur)
 - Fichier `worker/picksModel.ts` (sans dépendance, testable seul). Pour chaque match, la probabilité de chaque pari (1, N, 2, double chance, plus/moins de buts, les deux marquent) est calculée en fusionnant : la probabilité implicite des bookmakers (marge retirée, médiane), les pourcentages d'API-Football et un modèle de Poisson sur les buts moyens (domicile/extérieur). Le poids du marché est le plus élevé.
 - Elle est comparée à la MEILLEURE cote trouvée chez les bookmakers : valeur = probabilité × cote − 1. Seuls les paris qui passent les seuils sont envoyés à l'IA (DeepSeek, puis Claude en secours) qui joue le rôle de validateur : blessés, forme, enjeu, classement, face-à-face. Elle ne peut choisir que parmi ces paris, et sa confiance ne peut pas dépasser la probabilité calculée.
-- Deux niveaux : « Sûr » (confiance ≥ 80 %, cote ≥ 1,25, valeur ≥ 2 %, 2 au plus) et « Valeur » (confiance ≥ 65 %, cote ≥ 1,60, valeur ≥ 4 %, 2 au plus). Le niveau est affiché sur chaque pronostic et l'historique donne le taux de réussite et le rendement de chacun.
-- Seuils (variables Cloudflare) : `PICKS_MIN_CONFIDENCE` (80), `PICKS_MIN_ODDS` (1.25), `PICKS_MIN_EDGE` (2, en %) pour « Sûr » ; `PICKS_VALUE_MIN_CONFIDENCE` (65), `PICKS_VALUE_MIN_ODDS` (1.60), `PICKS_VALUE_MIN_EDGE` (4, en %) pour « Valeur ». Plus ils sont stricts, moins il y a de pronostics.
+- Deux niveaux : « Sûr » (confiance ≥ 72 %, cote ≥ 1,20, valeur ≥ -2 % c'est-à-dire cote presque équitable, 2 au plus) et « Valeur » (confiance ≥ 58 %, cote ≥ 1,60, valeur ≥ 2 %, 2 au plus). Le niveau est affiché sur chaque pronostic et l'historique donne le taux de réussite et le rendement de chacun.
+- Seuils (variables Cloudflare) : `PICKS_MIN_CONFIDENCE` (72), `PICKS_MIN_ODDS` (1.20), `PICKS_MIN_EDGE` (-2, en %) pour « Sûr » ; `PICKS_VALUE_MIN_CONFIDENCE` (58), `PICKS_VALUE_MIN_ODDS` (1.60), `PICKS_VALUE_MIN_EDGE` (2, en %) pour « Valeur ». Plus ils sont stricts, moins il y a de pronostics.
 - Coût API par analyse : environ 1 à 2 (matchs du jour) + 10 (prédictions) + 6 (cotes) + 4 (blessés) + classements en cache. Sous 40 requêtes restantes, cotes et blessés sont sautés. Le plan gratuit (100/jour) est juste : un plan payant d'API-Football est recommandé.
 - L'historique enregistre la cote de chaque pronostic ; après 5 pronostics vérifiés avec cote, le « rendement à mise égale » s'affiche. C'est la vraie mesure de la qualité, plus que le taux de réussite.
 
@@ -103,3 +103,7 @@ Flux RSS gratuits de Maxifoot (`/api/news`, cache 15 min, `NEWS_CACHE_SECONDS` p
 ## Coupon du jour
 
 Dans Pronostics IA : combiné des 2 à 3 paris « Sûr » à venir (cote totale = produit des cotes, chance estimée = produit des confiances), avec boutons copier et partager.
+
+## Diagnostic des pronostics (/admin)
+
+Le bloc « Dernière génération des pronostics » explique pourquoi il y a ou non des pronostics (quota, IA, filtres trop stricts, jour sans match) avec les chiffres de chaque étape, et le bouton « Relancer maintenant » refait l'analyse (environ 20 requêtes API). Si le quota est trop bas, l'analyse n'est plus mise en cache comme « vide » : elle sera retentée.
